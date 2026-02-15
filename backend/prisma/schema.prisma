@@ -1,0 +1,472 @@
+// prisma/schema.prisma
+
+ generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// CORE MODELS
+// ============================================
+
+model Church {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  address     String?
+  city        String?
+  state       String?
+  country     String?
+  zipCode     String?
+  phone       String?
+  email       String?
+  website     String?
+  
+  // Customization
+  logoUrl           String?
+  bannerUrl         String?
+  primaryColor      String   @default("#4F46E5")
+  secondaryColor    String   @default("#10B981")
+  timezone          String   @default("UTC")
+  
+  // Settings
+  allowPublicEvents Boolean  @default(false)
+  allowInterChurch  Boolean  @default(false)
+  
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  users           User[]
+  announcements   Announcement[]
+  prayerRequests  PrayerRequest[]
+  testimonies     Testimony[]
+  events          Event[]
+  groups          Group[]
+  sermons         Sermon[]
+  donations       Donation[]
+  attendances     Attendance[]
+  
+  @@map("churches")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  CHURCH_ADMIN
+  PASTOR
+  LEADER
+  MEMBER
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  firstName String
+  lastName  String
+  phone     String?
+  avatarUrl String?
+  bio       String?
+  
+  // Church Association
+  churchId  String
+  church    Church   @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  role      UserRole @default(MEMBER)
+  
+  // Status
+  isActive      Boolean  @default(true)
+  emailVerified Boolean  @default(false)
+  
+  // Metadata
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  announcements       Announcement[]
+  prayerRequests      PrayerRequest[]
+  prayers             Prayer[]
+  testimonies         Testimony[]
+  comments            Comment[]
+  eventRegistrations  EventRegistration[]
+  groupMemberships    GroupMembership[]
+  donations           Donation[]
+  attendances         Attendance[]
+  
+  @@map("users")
+}
+
+// ============================================
+// ANNOUNCEMENT SYSTEM
+// ============================================
+
+enum AnnouncementPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Announcement {
+  id          String                @id @default(uuid())
+  title       String
+  content     String
+  priority    AnnouncementPriority  @default(MEDIUM)
+  imageUrl    String?
+  
+  // Visibility
+  isPublished Boolean   @default(false)
+  publishAt   DateTime?
+  expiresAt   DateTime?
+  
+  // Association
+  churchId    String
+  church      Church    @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User      @relation(fields: [authorId], references: [id])
+  
+  // Metadata
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  comments    Comment[]
+  
+  @@map("announcements")
+}
+
+// ============================================
+// PRAYER REQUEST SYSTEM
+// ============================================
+
+enum PrayerRequestCategory {
+  HEALTH
+  FAMILY
+  FINANCES
+  SPIRITUAL
+  RELATIONSHIPS
+  WORK
+  OTHER
+}
+
+enum PrayerRequestStatus {
+  ACTIVE
+  ANSWERED
+  CLOSED
+}
+
+model PrayerRequest {
+  id          String                 @id @default(uuid())
+  title       String
+  description String
+  category    PrayerRequestCategory  @default(OTHER)
+  status      PrayerRequestStatus    @default(ACTIVE)
+  isAnonymous Boolean                @default(false)
+  isPrivate   Boolean                @default(false)
+  
+  // Association
+  churchId    String
+  church      Church    @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  requesterId String
+  requester   User      @relation(fields: [requesterId], references: [id])
+  
+  // Metadata
+  answeredAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  prayers     Prayer[]
+  comments    Comment[]
+  
+  @@map("prayer_requests")
+}
+
+model Prayer {
+  id               String         @id @default(uuid())
+  prayerRequestId  String
+  prayerRequest    PrayerRequest  @relation(fields: [prayerRequestId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User           @relation(fields: [userId], references: [id])
+  createdAt        DateTime       @default(now())
+  
+  @@unique([prayerRequestId, userId])
+  @@map("prayers")
+}
+
+// ============================================
+// TESTIMONY SYSTEM
+// ============================================
+
+enum TestimonyCategory {
+  HEALING
+  SALVATION
+  PROVISION
+  DELIVERANCE
+  ANSWERED_PRAYER
+  LIFE_CHANGE
+  OTHER
+}
+
+model Testimony {
+  id          String            @id @default(uuid())
+  title       String
+  content     String
+  category    TestimonyCategory @default(OTHER)
+  imageUrl    String?
+  videoUrl    String?
+  
+  // Visibility
+  isPublished Boolean   @default(false)
+  isFeatured  Boolean   @default(false)
+  
+  // Association
+  churchId    String
+  church      Church    @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User      @relation(fields: [authorId], references: [id])
+  
+  // Metadata
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  comments    Comment[]
+  
+  @@map("testimonies")
+}
+
+// ============================================
+// EVENT SYSTEM
+// ============================================
+
+enum EventType {
+  SERVICE
+  PRAYER_MEETING
+  BIBLE_STUDY
+  YOUTH_EVENT
+  CONFERENCE
+  WORKSHOP
+  OUTREACH
+  SOCIAL
+  OTHER
+}
+
+model Event {
+  id          String    @id @default(uuid())
+  title       String
+  description String
+  type        EventType @default(OTHER)
+  location    String?
+  imageUrl    String?
+  
+  // Timing
+  startTime   DateTime
+  endTime     DateTime
+  isAllDay    Boolean   @default(false)
+  
+  // Visibility
+  isPublic    Boolean   @default(false)
+  maxCapacity Int?
+  
+  // Association
+  churchId    String
+  church      Church    @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  
+  // Metadata
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  registrations EventRegistration[]
+  
+  @@map("events")
+}
+
+model EventRegistration {
+  id        String   @id @default(uuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  status    String   @default("registered")
+  createdAt DateTime @default(now())
+  
+  @@unique([eventId, userId])
+  @@map("event_registrations")
+}
+
+// ============================================
+// GROUP SYSTEM (Small Groups, Ministries)
+// ============================================
+
+model Group {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  imageUrl    String?
+  location    String?
+  meetingDay  String?
+  meetingTime String?
+  
+  // Settings
+  isActive    Boolean  @default(true)
+  isPrivate   Boolean  @default(false)
+  maxMembers  Int?
+  
+  // Association
+  churchId    String
+  church      Church   @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  memberships GroupMembership[]
+  
+  @@map("groups")
+}
+
+enum GroupRole {
+  LEADER
+  CO_LEADER
+  MEMBER
+}
+
+model GroupMembership {
+  id        String    @id @default(uuid())
+  groupId   String
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  role      GroupRole @default(MEMBER)
+  joinedAt  DateTime  @default(now())
+  
+  @@unique([groupId, userId])
+  @@map("group_memberships")
+}
+
+// ============================================
+// SERMON LIBRARY
+// ============================================
+
+model Sermon {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  speaker     String
+  scripture   String?
+  audioUrl    String?
+  videoUrl    String?
+  notesUrl    String?
+  thumbnailUrl String?
+  
+  // Details
+  sermonDate  DateTime
+  series      String?
+  duration    Int?
+  
+  // Association
+  churchId    String
+  church      Church   @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("sermons")
+}
+
+// ============================================
+// DONATION SYSTEM
+// ============================================
+
+enum DonationType {
+  TITHE
+  OFFERING
+  SPECIAL
+  BUILDING_FUND
+  MISSIONS
+  OTHER
+}
+
+model Donation {
+  id            String        @id @default(uuid())
+  amount        Decimal       @db.Decimal(10, 2)
+  currency      String        @default("USD")
+  type          DonationType  @default(OFFERING)
+  description   String?
+  isAnonymous   Boolean       @default(false)
+  
+  // Payment Info
+  paymentMethod String?
+  transactionId String?
+  
+  // Association
+  churchId      String
+  church        Church        @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  donorId       String
+  donor         User          @relation(fields: [donorId], references: [id])
+  
+  // Metadata
+  donatedAt     DateTime      @default(now())
+  createdAt     DateTime      @default(now())
+  
+  @@map("donations")
+}
+
+// ============================================
+// ATTENDANCE TRACKING
+// ============================================
+
+model Attendance {
+  id        String   @id @default(uuid())
+  date      DateTime
+  serviceType String
+  
+  // Association
+  churchId  String
+  church    Church   @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  
+  // Metadata
+  createdAt DateTime @default(now())
+  
+  @@unique([churchId, userId, date, serviceType])
+  @@map("attendances")
+}
+
+// ============================================
+// COMMENT SYSTEM (Generic)
+// ============================================
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  
+  // Polymorphic relations
+  announcementId   String?
+  announcement     Announcement?  @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  prayerRequestId  String?
+  prayerRequest    PrayerRequest? @relation(fields: [prayerRequestId], references: [id], onDelete: Cascade)
+  testimonyId      String?
+  testimony        Testimony?     @relation(fields: [testimonyId], references: [id], onDelete: Cascade)
+  
+  // Author
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  
+  // Metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("comments")
+}
