@@ -8,9 +8,7 @@ const API_BASE = __DEV__
   : 'https://your-production-api.com/api/v1';
 
 const api = axios.create({
-  baseURL: API_BASE,
-  headers: { 'Content-Type': 'application/json' },
-  timeout: 10000,
+  baseURL: process.env.EXPO_PUBLIC_API_URL ?? 'https://church-connect-api.onrender.com/api/v1',
 });
 
 // Request interceptor - attach token
