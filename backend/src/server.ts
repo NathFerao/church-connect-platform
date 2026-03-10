@@ -14,8 +14,12 @@ const startServer = async () => {
     await prisma.$connect();
     logger.info('✓ Database connected');
 
-    await redis.ping();
-    logger.info('✓ Redis connected');
+    if (redis) {
+      await redis.ping();
+      logger.info('✓ Redis connected');
+    } else {
+      logger.info('ℹ Redis not configured — skipping');
+    }
 
     const server = app.listen(config.port, () => {
       logger.info(`✓ Server running on port ${config.port} in ${config.nodeEnv} mode`);
@@ -30,8 +34,12 @@ const startServer = async () => {
         try {
           await prisma.$disconnect();
           logger.info('Database disconnected');
-          redis.disconnect();
-          logger.info('Redis disconnected');
+
+          if (redis) {
+            redis.disconnect();
+            logger.info('Redis disconnected');
+          }
+
           process.exit(0);
         } catch (error) {
           logger.error('Error during shutdown:', error);

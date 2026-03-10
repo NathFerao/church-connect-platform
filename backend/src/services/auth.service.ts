@@ -18,23 +18,20 @@ export class AuthService {
   }
 
   async register(data: {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-  churchId?: string; // ✅ Make optional
-}): Promise<{ user: Partial<User>; token: string }> {
-  // Check if user already exists
-  const existingUser = await this.userRepository.findByEmail(data.email);
-  if (existingUser) {
-    throw new ConflictError('Email already registered');
-  }
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    churchId?: string;
+  }): Promise<{ user: Partial<User>; token: string }> {
+    const existingUser = await this.userRepository.findByEmail(data.email);
+    if (existingUser) {
+      throw new ConflictError('Email already registered');
+    }
 
-  // Hash password
-  const hashedPassword = await bcrypt.hash(data.password, 12);
+    const hashedPassword = await bcrypt.hash(data.password, 12);
 
-  // Create user (churchId can be null)
-  const user = await this.userRepository.create({
+    const user = await this.userRepository.create({
       email: data.email,
       password: hashedPassword,
       firstName: data.firstName,
@@ -45,7 +42,6 @@ export class AuthService {
       emailVerified: false,
     });
 
-    // Generate token
     const token = jwt.sign(
       {
         userId: user.id,
@@ -100,14 +96,21 @@ export class AuthService {
   }
 
   async logout(token: string): Promise<void> {
-    await redis.setex(`blacklist:${token}`, 7 * 24 * 60 * 60, '1');
+    // If Redis is available, blacklist the token so it can't be reused.
+    // If Redis is not configured, we skip blacklisting — the token will
+    // simply expire naturally via its JWT expiry.
+    if (redis) {
+      await redis.setex(`blacklist:${token}`, 7 * 24 * 60 * 60, '1');
+    }
   }
 
   async verifyToken(token: string): Promise<JwtPayload> {
-    const isBlacklisted = await redis.get(`blacklist:${token}`);
-
-    if (isBlacklisted) {
-      throw new UnauthorizedError('Token has been invalidated');
+    // Only check blacklist if Redis is available
+    if (redis) {
+      const isBlacklisted = await redis.get(`blacklist:${token}`);
+      if (isBlacklisted) {
+        throw new UnauthorizedError('Token has been invalidated');
+      }
     }
 
     try {
@@ -118,8 +121,6 @@ export class AuthService {
   }
 
   private generateToken(user: User | null): string {
-    // Guard: if user is somehow null, fail fast here.
-    // After this line TypeScript knows user is non-null.
     if (!user) {
       throw new UnauthorizedError('User is required to generate token');
     }
@@ -138,33 +139,29 @@ export class AuthService {
 
     return jwt.sign(payload, secret, options);
   }
+
   async requestPasswordReset(email: string): Promise<boolean> {
     const user = await this.userRepository.findByEmail(email);
-    
+
     if (!user) {
-      // Don't reveal if email exists or not (security)
-      return true;
+      return true; // Don't reveal if email exists or not
     }
 
-    // Generate reset token
     const resetToken = crypto.randomBytes(32).toString('hex');
     const resetPasswordToken = crypto
       .createHash('sha256')
       .update(resetToken)
       .digest('hex');
-    
+
     const resetPasswordExpires = new Date(Date.now() + config.email.resetTokenExpiry);
 
-    // Save token to database
     await this.userRepository.update(user.id, {
       resetPasswordToken,
       resetPasswordExpires,
     });
 
-    // Create reset URL
     const resetUrl = `${config.frontendUrl}/reset-password?token=${resetToken}`;
 
-    // Send email
     const { subject, html, text } = emailTemplates.passwordReset(resetUrl, user.firstName);
     await sendEmail(user.email, subject, html, text);
 
@@ -172,16 +169,14 @@ export class AuthService {
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
-    // Hash the token to match database
     const resetPasswordToken = crypto
       .createHash('sha256')
       .update(token)
       .digest('hex');
 
-    // Find user with valid token
     const user = await prisma.user.findFirst({
       where: {
-        resetPasswordToken: resetPasswordToken,
+        resetPasswordToken,
         resetPasswordExpires: {
           gt: new Date(),
         },
@@ -192,10 +187,8 @@ export class AuthService {
       throw new BadRequestError('Invalid or expired reset token');
     }
 
-    // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 12);
 
-    // Update password and clear reset token
     await this.userRepository.update(user.id, {
       password: hashedPassword,
       resetPasswordToken: null,
