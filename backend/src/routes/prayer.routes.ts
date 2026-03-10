@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import { PrayerController } from '../controllers/prayer.controller';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireChurch } from '../middleware/auth';
 import { validate } from '../middleware/validation';
 import { validators } from '../utils/validators';
 
@@ -9,6 +9,7 @@ const router = Router();
 const prayerController = new PrayerController();
 
 router.use(authenticate);
+router.use(requireChurch);
 
 router.get('/', prayerController.getAll);
 

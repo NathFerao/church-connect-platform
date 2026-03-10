@@ -73,15 +73,22 @@ model User {
   phone     String?
   avatarUrl String?
   bio       String?
+
+  googleId  String?  @unique
+
   
-  // Church Association
-  churchId  String
-  church    Church   @relation(fields: [churchId], references: [id], onDelete: Cascade)
+  // Church Association - NOW NULLABLE
+  churchId  String?  
+  church    Church?  @relation(fields: [churchId], references: [id], onDelete: Cascade) // ✅ Add ? here
   role      UserRole @default(MEMBER)
   
   // Status
   isActive      Boolean  @default(true)
   emailVerified Boolean  @default(false)
+  
+  // Password Reset
+  resetPasswordToken   String?   @unique
+  resetPasswordExpires DateTime?
   
   // Metadata
   lastLoginAt DateTime?
@@ -285,6 +292,9 @@ model Event {
   
   // Relations
   registrations EventRegistration[]
+
+  recurrenceGroupId String?
+  recurrenceIndex   Int?
   
   @@map("events")
 }

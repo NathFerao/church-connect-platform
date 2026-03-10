@@ -47,19 +47,21 @@ export const useAuthStore = create<AuthState>()(
       setLoading: (v) => set({ isLoading: v }),
     }),
     {
-      name: 'cc-auth',                    // sessionStorage key
+      name: 'cc-auth',
       storage: typeof window !== 'undefined'
         ? {
-            getItem: (k) => sessionStorage.getItem(k),
-            setItem: (k, v) => sessionStorage.setItem(k, v),
+            getItem: (k) => {
+              const item = sessionStorage.getItem(k);
+              return item ? JSON.parse(item) : null;
+            },
+            setItem: (k, v) => {
+              sessionStorage.setItem(k, JSON.stringify(v));
+            },
             removeItem: (k) => sessionStorage.removeItem(k),
           }
-        : undefined,                      // SSR: no storage
+        : undefined,
     }
   )
 );
 
-// Re-export getState so the axios interceptor can call it
-// without importing the React hook (which must only run
-// inside a component).
 export const getState = useAuthStore.getState;

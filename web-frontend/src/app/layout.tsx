@@ -13,18 +13,27 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
-        <style dangerouslySetInnerHTML={{
-          __html: `
-            :root {
-              --cc-primary: #4F46E5;
-              --cc-secondary: #10B981;
-            }
-          `
-        }} />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var stored = localStorage.getItem('cc-theme');
+                  if (stored) {
+                    var parsed = JSON.parse(stored);
+                    if (parsed.state && parsed.state.isDark === true) {
+                      document.documentElement.classList.add('dark');
+                    }
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
       </head>
-      <body className={`${inter.className} bg-gray-50 min-h-screen`}>
+      <body className={`${inter.className} bg-background min-h-screen`}>
         <Toaster position="top-right" />
         <ThemeProvider>{children}</ThemeProvider>
       </body>

@@ -1,9 +1,32 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, FlatList, RefreshControl } from 'react-native';
-import { Card, Text, Chip } from 'react-native-paper';
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  RefreshControl,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  TouchableOpacity,
+} from 'react-native';
+import {
+  Card,
+  Text,
+  Chip,
+  FAB,
+  Portal,
+  Modal,
+  TextInput,
+  Button,
+} from 'react-native-paper';
 import api from '../services/api';
-import { colors } from '../theme/colors';
+import { getColors, colors } from '../theme/colors';
+import { useThemeStore } from '../stores/theme.store';
+import { useAuthStore } from '../stores/auth.store';
 import { format } from 'date-fns';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Announcement {
   id: string;
@@ -14,6 +37,8 @@ interface Announcement {
   author: { firstName: string; lastName: string };
 }
 
+type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+
 const PRIORITY_COLORS: Record<string, string> = {
   LOW: '#9CA3AF',
   MEDIUM: '#3B82F6',
@@ -21,25 +46,48 @@ const PRIORITY_COLORS: Record<string, string> = {
   URGENT: '#EF4444',
 };
 
+const PRIORITY_OPTIONS: { label: string; value: Priority }[] = [
+  { label: 'Low', value: 'LOW' },
+  { label: 'Medium', value: 'MEDIUM' },
+  { label: 'High', value: 'HIGH' },
+  { label: 'Urgent', value: 'URGENT' },
+];
+
+// Only these roles can create announcements
+const CREATOR_ROLES = ['SUPER_ADMIN', 'CHURCH_ADMIN', 'PASTOR', 'LEADER'];
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function AnnouncementsScreen() {
+  const { isDark } = useThemeStore();
+  const c = getColors(isDark);
+  const { user } = useAuthStore();
+
+  const canCreate = CREATOR_ROLES.includes(user?.role ?? '');
+
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [priority, setPriority] = useState<Priority>('MEDIUM');
+  const [submitting, setSubmitting] = useState(false);
 
   const fetchAnnouncements = async () => {
     try {
       const { data } = await api.get('/announcements?limit=50');
       setAnnouncements(data.data?.data || []);
-    } catch (error) {
-      console.error('Failed to load announcements');
+    } catch {
+      // silent
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchAnnouncements();
-  }, []);
+  useEffect(() => { fetchAnnouncements(); }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -47,67 +95,190 @@ export default function AnnouncementsScreen() {
     setRefreshing(false);
   };
 
+  const openModal = () => {
+    setTitle(''); setContent(''); setPriority('MEDIUM');
+    setModalVisible(true);
+  };
+
+  const handleSubmit = async () => {
+    if (!title.trim() || !content.trim()) {
+      Alert.alert('Error', 'Please fill in the title and content');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.post('/announcements', {
+        title: title.trim(),
+        content: content.trim(),
+        priority,
+      });
+      setModalVisible(false);
+      await fetchAnnouncements();
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.error || 'Could not post announcement');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
-    <FlatList
-      data={announcements}
-      keyExtractor={(item) => item.id}
-      contentContainerStyle={styles.list}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      renderItem={({ item }) => (
-        <Card style={styles.card}>
-          <Card.Content>
-            <View style={styles.header}>
-              <Text variant="titleMedium" style={styles.title}>{item.title}</Text>
-              <Chip 
-                textStyle={{ color: 'white', fontSize: 10 }}
-                style={{ backgroundColor: PRIORITY_COLORS[item.priority] }}
-              >
-                {item.priority}
-              </Chip>
-            </View>
-            <Text variant="bodyMedium" style={styles.content}>{item.content}</Text>
-            <Text variant="bodySmall" style={styles.meta}>
-              {item.author.firstName} {item.author.lastName} • {format(new Date(item.createdAt), 'MMM d, yyyy')}
-            </Text>
-          </Card.Content>
-        </Card>
+    <View style={[styles.container, { backgroundColor: c.background }]}>
+      <FlatList
+        data={announcements}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListHeaderComponent={
+          <Text variant="headlineSmall" style={[styles.heading, { color: c.text }]}>
+            Announcements
+          </Text>
+        }
+        renderItem={({ item }) => (
+          <Card style={[styles.card, { backgroundColor: c.surface }]}>
+            <Card.Content>
+              <View style={styles.header}>
+                <Text variant="titleMedium" style={[styles.title, { color: c.text }]}>
+                  {item.title}
+                </Text>
+                <Chip
+                  compact
+                  textStyle={{ color: 'white', fontSize: 10 }}
+                  style={{ backgroundColor: PRIORITY_COLORS[item.priority] ?? '#6B7280' }}
+                >
+                  {item.priority}
+                </Chip>
+              </View>
+              <Text variant="bodyMedium" style={[styles.content, { color: c.textSecondary }]}>
+                {item.content}
+              </Text>
+              <Text variant="bodySmall" style={{ color: c.textSecondary, fontSize: 12 }}>
+                {item.author.firstName} {item.author.lastName} •{' '}
+                {format(new Date(item.createdAt), 'MMM d, yyyy')}
+              </Text>
+            </Card.Content>
+          </Card>
+        )}
+        ListEmptyComponent={
+          !loading ? (
+            <Text style={[styles.empty, { color: c.textSecondary }]}>No announcements yet</Text>
+          ) : null
+        }
+      />
+
+      {/* FAB only visible to admins/pastors/leaders */}
+      {canCreate && (
+        <FAB icon="plus" style={styles.fab} onPress={openModal} />
       )}
-      ListEmptyComponent={
-        <Text style={styles.empty}>No announcements yet</Text>
-      }
-    />
+
+      {/* ─── Create Announcement Modal ─── */}
+      <Portal>
+        <Modal
+          visible={modalVisible}
+          onDismiss={() => setModalVisible(false)}
+          contentContainerStyle={[styles.modal, { backgroundColor: c.surface }]}
+        >
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text variant="titleLarge" style={[styles.modalTitle, { color: c.text }]}>
+                New Announcement
+              </Text>
+
+              <TextInput
+                label="Title"
+                value={title}
+                onChangeText={setTitle}
+                style={styles.input}
+                mode="outlined"
+              />
+
+              <TextInput
+                label="Content"
+                value={content}
+                onChangeText={setContent}
+                style={styles.input}
+                mode="outlined"
+                multiline
+                numberOfLines={5}
+              />
+
+              <Text variant="labelMedium" style={[styles.fieldLabel, { color: c.textSecondary }]}>
+                Priority
+              </Text>
+
+              {/* Priority selector */}
+              <View style={styles.priorityRow}>
+                {PRIORITY_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[
+                      styles.priorityBtn,
+                      { borderColor: isDark ? '#374151' : '#D1D5DB' },
+                      priority === opt.value && {
+                        borderColor: PRIORITY_COLORS[opt.value],
+                        backgroundColor: `${PRIORITY_COLORS[opt.value]}18`,
+                      },
+                    ]}
+                    onPress={() => setPriority(opt.value)}
+                  >
+                    <View style={[styles.priorityDot, { backgroundColor: PRIORITY_COLORS[opt.value] }]} />
+                    <Text style={[
+                      styles.priorityLabel,
+                      { color: priority === opt.value ? PRIORITY_COLORS[opt.value] : c.textSecondary },
+                      priority === opt.value && { fontWeight: '600' },
+                    ]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.modalActions}>
+                <Button mode="outlined" onPress={() => setModalVisible(false)}
+                  style={styles.modalBtn} disabled={submitting}>
+                  Cancel
+                </Button>
+                <Button mode="contained" onPress={handleSubmit}
+                  style={styles.modalBtn} loading={submitting}
+                  disabled={submitting || !title.trim() || !content.trim()}>
+                  Post
+                </Button>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </Modal>
+      </Portal>
+    </View>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  list: {
-    padding: 16,
-  },
-  card: {
-    marginBottom: 12,
-  },
+  container: { flex: 1 },
+  list: { padding: 16, paddingBottom: 80 },
+  heading: { fontWeight: 'bold', marginBottom: 16 },
+  card: { marginBottom: 12 },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'flex-start', marginBottom: 8, gap: 8,
   },
-  title: {
-    flex: 1,
-    marginRight: 8,
-    fontWeight: 'bold',
+  title: { flex: 1, fontWeight: 'bold' },
+  content: { marginBottom: 8 },
+  empty: { textAlign: 'center', marginTop: 32 },
+  fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: colors.primary },
+  modal: { margin: 20, borderRadius: 16, padding: 24, maxHeight: '90%' },
+  modalTitle: { fontWeight: 'bold', marginBottom: 20 },
+  input: { marginBottom: 16 },
+  fieldLabel: { marginBottom: 10 },
+  priorityRow: { flexDirection: 'row', gap: 8, marginBottom: 20, flexWrap: 'wrap' },
+  priorityBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1.5, borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 8, flex: 1,
+    justifyContent: 'center',
   },
-  content: {
-    marginBottom: 8,
-    color: colors.textSecondary,
-  },
-  meta: {
-    color: colors.textSecondary,
-    fontSize: 12,
-  },
-  empty: {
-    textAlign: 'center',
-    marginTop: 32,
-    color: colors.textSecondary,
-  },
+  priorityDot: { width: 8, height: 8, borderRadius: 4 },
+  priorityLabel: { fontSize: 13 },
+  modalActions: { flexDirection: 'row', gap: 12 },
+  modalBtn: { flex: 1 },
 });

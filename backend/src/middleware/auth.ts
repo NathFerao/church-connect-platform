@@ -31,7 +31,7 @@ export const authenticate = async (
     // Assign the full Prisma user object directly —
     // no need to pick fields manually.
     req.user = user;
-    req.churchId = user.churchId;
+    req.churchId = user.churchId || '';
     next();
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError) {
@@ -56,4 +56,18 @@ export const authorize = (...roles: string[]) => {
 
     next();
   };
+};
+
+export const requireChurch = (req: Request, _res: Response, next: NextFunction) => {
+  if (!req.user) {
+    return next(new UnauthorizedError('Not authenticated'));
+  }
+
+  if (!req.user.churchId) {
+    return next(
+      new ForbiddenError('You must be assigned to a church to access this resource')
+    );
+  }
+
+  next();
 };

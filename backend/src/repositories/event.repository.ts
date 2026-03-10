@@ -56,7 +56,10 @@ export class EventRepository extends BaseRepository<Event> {
   async isUserRegistered(eventId: string, userId: string): Promise<boolean> {
     const registration = await prisma.eventRegistration.findUnique({
       where: {
-        eventId_userId: { eventId, userId },
+        eventId_userId: {
+          eventId,
+          userId,
+        },
       },
     });
     return !!registration;

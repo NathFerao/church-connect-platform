@@ -54,4 +54,8 @@ export class UserRepository extends BaseRepository<User> {
   async countByChurch(churchId: string): Promise<number> {
     return prisma.user.count({ where: { churchId } });
   }
+
+  async countByRole(churchId: string, role: string): Promise<number> {
+    return prisma.user.count({ where: { churchId, role: role as any } });
+  }
 }

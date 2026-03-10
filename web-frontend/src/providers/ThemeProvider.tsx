@@ -6,10 +6,15 @@ import { useThemeStore } from '@/lib/stores/theme.store';
 
 export default function ThemeProvider({ children }: { children: React.ReactNode }) {
   const church = useAuthStore((s) => s.church);
-  const { primary, secondary } = useThemeStore();
+  const { primary, secondary, isDark } = useThemeStore();
+
+  // Apply dark mode synchronously before paint via a blocking script
+  // This prevents the flash of wrong theme on page load/navigation
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDark);
+  }, [isDark]); // ← watch isDark so it re-applies on every change
 
   useEffect(() => {
-    // Rebuild theme store whenever church identity changes
     useThemeStore.getState().refresh();
   }, [church]);
 

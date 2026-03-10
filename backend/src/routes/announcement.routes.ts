@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import { AnnouncementController } from '../controllers/announcement.controller';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, requireChurch } from '../middleware/auth';
 import { validate } from '../middleware/validation';
 import { validators } from '../utils/validators';
 
@@ -9,6 +9,7 @@ const router = Router();
 const announcementController = new AnnouncementController();
 
 router.use(authenticate);
+router.use(requireChurch);
 
 router.get('/', announcementController.getAll);
 

@@ -1,14 +1,15 @@
-
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import AppShell from '@/components/layout/AppShell';
+import { useAuthStore } from '@/lib/stores/auth.store';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 
 export default function CreateChurchPage() {
   const router = useRouter();
+  const userRole = useAuthStore((s) => s.user?.role);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: '',
@@ -25,6 +26,12 @@ export default function CreateChurchPage() {
     adminFirstName: '',
     adminLastName: '',
   });
+
+  useEffect(() => {
+    if (userRole !== 'SUPER_ADMIN') {
+      router.replace('/dashboard');
+    }
+  }, [userRole, router]);
 
   const change = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
@@ -44,98 +51,106 @@ export default function CreateChurchPage() {
     }
   };
 
+  const inputCls = "w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground";
+  const labelCls = "block text-sm font-medium text-foreground mb-1";
+  const cardCls = "bg-card text-card-foreground rounded-xl shadow-sm border border-border p-6 space-y-6";
+
+  if (userRole !== 'SUPER_ADMIN') {
+    return null;
+  }
+
   return (
     <AppShell>
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Create New Church</h1>
+        <h1 className="text-2xl font-bold text-foreground mb-6">Create New Church</h1>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border p-6 space-y-6">
+        <form onSubmit={handleSubmit} className={cardCls}>
           {/* Church Info Section */}
           <div>
-            <h2 className="text-lg font-semibold mb-4">Church Information</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-4">Church Information</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Church Name *</label>
+                <label className={labelCls}>Church Name *</label>
                 <input
                   name="name"
                   required
                   value={form.name}
                   onChange={change}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  className={inputCls}
                   placeholder="Grace Community Church"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Description</label>
+                <label className={labelCls}>Description</label>
                 <textarea
                   name="description"
                   value={form.description}
                   onChange={change}
                   rows={3}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  className={`${inputCls} resize-none`}
                   placeholder="A welcoming community..."
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Email</label>
+                  <label className={labelCls}>Email</label>
                   <input
                     name="email"
                     type="email"
                     value={form.email}
                     onChange={change}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    className={inputCls}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Phone</label>
+                  <label className={labelCls}>Phone</label>
                   <input
                     name="phone"
                     value={form.phone}
                     onChange={change}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    className={inputCls}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Address</label>
+                <label className={labelCls}>Address</label>
                 <input
                   name="address"
                   value={form.address}
                   onChange={change}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  className={inputCls}
                 />
               </div>
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">City</label>
+                  <label className={labelCls}>City</label>
                   <input
                     name="city"
                     value={form.city}
                     onChange={change}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    className={inputCls}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">State</label>
+                  <label className={labelCls}>State</label>
                   <input
                     name="state"
                     value={form.state}
                     onChange={change}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    className={inputCls}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">ZIP Code</label>
+                  <label className={labelCls}>ZIP Code</label>
                   <input
                     name="zipCode"
                     value={form.zipCode}
                     onChange={change}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    className={inputCls}
                   />
                 </div>
               </div>
@@ -143,46 +158,49 @@ export default function CreateChurchPage() {
           </div>
 
           {/* Admin User Section */}
-          <div className="border-t pt-6">
-            <h2 className="text-lg font-semibold mb-4">Church Administrator</h2>
+          <div className="border-t border-border pt-6">
+            <h2 className="text-lg font-semibold text-foreground mb-4">Church Administrator</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              This person will have full admin access to manage the church
+            </p>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">First Name *</label>
+                  <label className={labelCls}>First Name *</label>
                   <input
                     name="adminFirstName"
                     required
                     value={form.adminFirstName}
                     onChange={change}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    className={inputCls}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Last Name *</label>
+                  <label className={labelCls}>Last Name *</label>
                   <input
                     name="adminLastName"
                     required
                     value={form.adminLastName}
                     onChange={change}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    className={inputCls}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Email *</label>
+                <label className={labelCls}>Email *</label>
                 <input
                   name="adminEmail"
                   type="email"
                   required
                   value={form.adminEmail}
                   onChange={change}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  className={inputCls}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Password *</label>
+                <label className={labelCls}>Password *</label>
                 <input
                   name="adminPassword"
                   type="password"
@@ -190,25 +208,25 @@ export default function CreateChurchPage() {
                   minLength={8}
                   value={form.adminPassword}
                   onChange={change}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  className={inputCls}
                   placeholder="Min 8 characters"
                 />
               </div>
             </div>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex gap-3 pt-4">
             <button
               type="button"
               onClick={() => router.back()}
-              className="px-6 py-2 border rounded-lg hover:bg-gray-50"
+              className="px-6 py-2 rounded-lg border border-border hover:bg-muted text-foreground transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 py-2 bg-primary text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+              className="flex-1 py-2 bg-primary text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
             >
               {loading ? 'Creating...' : 'Create Church'}
             </button>

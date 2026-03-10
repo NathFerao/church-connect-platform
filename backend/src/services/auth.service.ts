@@ -6,6 +6,9 @@ import { config } from '../config/constants';
 import redis from '../config/redis';
 import { UnauthorizedError, ConflictError, BadRequestError } from '../utils/errors';
 import { JwtPayload } from '../types';
+import crypto from 'crypto';
+import { sendEmail, emailTemplates } from '../config/email';
+import prisma from '../config/database';
 
 export class AuthService {
   private userRepository: UserRepository;
@@ -15,30 +18,46 @@ export class AuthService {
   }
 
   async register(data: {
-    email: string;
-    password: string;
-    firstName: string;
-    lastName: string;
-    churchId: string;
-    phone?: string;
-  }): Promise<{ user: Partial<User>; token: string }> {
-    const existingUser = await this.userRepository.findByEmail(data.email);
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  churchId?: string; // ✅ Make optional
+}): Promise<{ user: Partial<User>; token: string }> {
+  // Check if user already exists
+  const existingUser = await this.userRepository.findByEmail(data.email);
+  if (existingUser) {
+    throw new ConflictError('Email already registered');
+  }
 
-    if (existingUser) {
-      throw new ConflictError('Email already registered');
-    }
+  // Hash password
+  const hashedPassword = await bcrypt.hash(data.password, 12);
 
-    const hashedPassword = await bcrypt.hash(data.password, 12);
-
-    const user = await this.userRepository.create({
-      ...data,
+  // Create user (churchId can be null)
+  const user = await this.userRepository.create({
+      email: data.email,
       password: hashedPassword,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      churchId: data.churchId || null,
       role: 'MEMBER',
+      isActive: true,
+      emailVerified: false,
     });
 
-    const token = this.generateToken(user);
-    const { password, ...userWithoutPassword } = user;
+    // Generate token
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+        churchId: user.churchId || '',
+        role: user.role,
+      },
+      config.jwt.secret as jwt.Secret,
+      { expiresIn: config.jwt.expiresIn as jwt.SignOptions['expiresIn'] }
+    );
 
+    const { password: _, ...userWithoutPassword } = user;
     return { user: userWithoutPassword, token };
   }
 
@@ -108,7 +127,7 @@ export class AuthService {
     const payload: JwtPayload = {
       userId: user.id,
       email: user.email,
-      churchId: user.churchId,
+      churchId: user.churchId || '',
       role: user.role,
     };
 
@@ -118,5 +137,69 @@ export class AuthService {
     };
 
     return jwt.sign(payload, secret, options);
+  }
+  async requestPasswordReset(email: string): Promise<boolean> {
+    const user = await this.userRepository.findByEmail(email);
+    
+    if (!user) {
+      // Don't reveal if email exists or not (security)
+      return true;
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetPasswordToken = crypto
+      .createHash('sha256')
+      .update(resetToken)
+      .digest('hex');
+    
+    const resetPasswordExpires = new Date(Date.now() + config.email.resetTokenExpiry);
+
+    // Save token to database
+    await this.userRepository.update(user.id, {
+      resetPasswordToken,
+      resetPasswordExpires,
+    });
+
+    // Create reset URL
+    const resetUrl = `${config.frontendUrl}/reset-password?token=${resetToken}`;
+
+    // Send email
+    const { subject, html, text } = emailTemplates.passwordReset(resetUrl, user.firstName);
+    await sendEmail(user.email, subject, html, text);
+
+    return true;
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    // Hash the token to match database
+    const resetPasswordToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
+
+    // Find user with valid token
+    const user = await prisma.user.findFirst({
+      where: {
+        resetPasswordToken: resetPasswordToken,
+        resetPasswordExpires: {
+          gt: new Date(),
+        },
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestError('Invalid or expired reset token');
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    // Update password and clear reset token
+    await this.userRepository.update(user.id, {
+      password: hashedPassword,
+      resetPasswordToken: null,
+      resetPasswordExpires: null,
+    });
   }
 }

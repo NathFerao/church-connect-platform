@@ -1,126 +1,177 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
-import { useAuthStore } from '@/lib/stores/auth.store';
-import { useThemeStore } from '@/lib/stores/theme.store';
+import React from "react"
+import Link from "next/link"
+import { usePathname, useRouter } from "next/navigation"
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar";
+  LayoutDashboard, Bell, Heart, BookOpen,
+  Calendar, Users, MessageSquare, Settings,
+  Moon, Sun, LogOut, Building2, UserPlus
+} from "lucide-react"
 import {
-  LayoutDashboard,
-  Bell,
-  Heart,
-  BookOpen,
-  Calendar,
-  Users,
-  LogOut,
-  MessageSquare,
-  Settings,
-} from 'lucide-react';
+  Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
+  SidebarGroupLabel, SidebarMenu, SidebarMenuButton,
+  SidebarMenuItem, SidebarSeparator
+} from "../ui/sidebar"
+import { useThemeStore } from "@/lib/stores/theme.store"
+import { useAuthStore } from "@/lib/stores/auth.store"
 
-const NAV = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Announcements', href: '/announcements', icon: Bell },
-  { label: 'Prayer Requests', href: '/prayers', icon: Heart },
-  { label: 'Testimonies', href: '/testimonies', icon: BookOpen },
-  { label: 'Events', href: '/events', icon: Calendar },
-  { label: 'Members', href: '/members', icon: Users },
-  { label: 'Messages', href: '/messages', icon: MessageSquare },
-  { label: 'Settings', href: '/settings', icon: Settings },
+const MAIN_NAV = [
+  { label: 'Dashboard',       url: '/dashboard',      icon: LayoutDashboard },
+  { label: 'Announcements',   url: '/announcements',  icon: Bell },
+  { label: 'Prayer Requests', url: '/prayers',        icon: Heart },
+  { label: 'Testimonies',     url: '/testimonies',    icon: BookOpen },
+  { label: 'Events',          url: '/events',         icon: Calendar },
+  { label: 'Members',         url: '/members',        icon: Users },
+  { label: 'Messages',        url: '/messages',       icon: MessageSquare },
 ];
 
-const getImageUrl = (path: string | null | undefined): string => {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  return `http://localhost:5000${path}`;
-};
+const SETTINGS_NAV = [
+  { label: 'Settings',        url: '/settings',       icon: Settings },
+];
 
-export function AppSidebar() {
+const CHURCH_ADMIN_NAV = [
+  { label: 'Manage Members',  url: '/admin/members',  icon: UserPlus },
+];
+
+const SUPER_ADMIN_NAV = [
+  { label: 'All Churches',    url: '/admin/churches', icon: Building2 },
+];
+
+export default function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const user = useAuthStore((s) => s.user);
-  const church = useAuthStore((s) => s.church);
-  const { primary } = useThemeStore();
+  const { isDark, toggleDark } = useThemeStore();
   const logout = useAuthStore((s) => s.logout);
+  const userRole = useAuthStore((s) => s.user?.role);
+
+  const isSuperAdmin = userRole === 'SUPER_ADMIN';
+  const isChurchAdmin = userRole === 'CHURCH_ADMIN' || isSuperAdmin;
 
   const handleLogout = () => {
     logout();
     router.push('/login');
   };
 
-  const churchName = church?.name || 'Church';
-  const logoUrl = getImageUrl(church?.logoUrl);
-
   return (
-    <Sidebar>
-      <SidebarHeader>
-        <div className="flex items-center gap-3 px-4 py-4">
-          {logoUrl ? (
-            <div className="w-10 h-10 flex-shrink-0 rounded-lg border bg-white overflow-hidden">
-              <img
-                src={logoUrl}
-                alt={churchName}
-                className="w-full h-full object-cover"
-              />
-            </div>
-          ) : (
-            <div
-              className="w-10 h-10 flex-shrink-0 rounded-lg flex items-center justify-center text-white font-bold"
-              style={{ backgroundColor: primary }}
-            >
-              {churchName[0]}
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm truncate">{churchName}</p>
-            <p className="text-xs text-muted-foreground">Management</p>
-          </div>
-        </div>
-      </SidebarHeader>
-
-      <SidebarContent>
+    <Sidebar collapsible="offcanvas">
+      {/* ✅ Add overflow-hidden to prevent horizontal scroll */}
+      <SidebarContent className="overflow-x-hidden">
+        {/* Main Navigation */}
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {NAV.map(({ label, href, icon: Icon }) => {
-                const active = pathname.startsWith(href);
-                
-                if (label === 'Settings' && !['CHURCH_ADMIN', 'SUPER_ADMIN'].includes(user?.role || '')) {
-                  return null;
-                }
-                
-                return (
-                  <SidebarMenuItem key={href}>
+          <SidebarMenu>
+            {MAIN_NAV.map((item) => (
+              <SidebarMenuItem key={item.label}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === item.url}
+                  tooltip={item.label}
+                >
+                  <Link href={item.url}>
+                    <item.icon />
+                    <span>{item.label}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
+
+        <SidebarSeparator />
+
+        {/* Settings - visible to all */}
+        <SidebarGroup>
+          <SidebarMenu>
+            {SETTINGS_NAV.map((item) => (
+              <SidebarMenuItem key={item.label}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === item.url}
+                  tooltip={item.label}
+                >
+                  <Link href={item.url}>
+                    <item.icon />
+                    <span>{item.label}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
+
+        {/* Church Admin Section */}
+        {isChurchAdmin && (
+          <>
+            <SidebarSeparator />
+            <SidebarGroup>
+              {/* ✅ Add truncate to prevent label overflow */}
+              <SidebarGroupLabel className="truncate">Church Admin</SidebarGroupLabel>
+              <SidebarMenu>
+                {CHURCH_ADMIN_NAV.map((item) => (
+                  <SidebarMenuItem key={item.label}>
                     <SidebarMenuButton
-                      onClick={() => router.push(href)}
-                      isActive={active}
-                      tooltip={label}
+                      asChild
+                      isActive={pathname === item.url}
+                      tooltip={item.label}
                     >
-                      <Icon />
-                      <span>{label}</span>
+                      <Link href={item.url}>
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+                ))}
+              </SidebarMenu>
+            </SidebarGroup>
+          </>
+        )}
+
+        {/* Super Admin Section */}
+        {isSuperAdmin && (
+          <>
+            <SidebarSeparator />
+            <SidebarGroup>
+              {/* ✅ Add truncate to prevent label overflow */}
+              <SidebarGroupLabel className="truncate">Super Admin</SidebarGroupLabel>
+              <SidebarMenu>
+                {SUPER_ADMIN_NAV.map((item) => (
+                  <SidebarMenuItem key={item.label}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname === item.url}
+                      tooltip={item.label}
+                    >
+                      <Link href={item.url}>
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroup>
+          </>
+        )}
       </SidebarContent>
 
+      <SidebarSeparator />
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleLogout}>
+            <SidebarMenuButton
+              onClick={toggleDark}
+              tooltip={isDark ? 'Light Mode' : 'Dark Mode'}
+            >
+              {isDark ? <Sun /> : <Moon />}
+              <span>{isDark ? 'Light Mode' : 'Dark Mode'}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={handleLogout}
+              tooltip="Logout"
+              className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+            >
               <LogOut />
               <span>Logout</span>
             </SidebarMenuButton>
@@ -128,5 +179,5 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
-  );
+  )
 }

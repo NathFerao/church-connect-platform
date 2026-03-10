@@ -34,7 +34,7 @@ export default function AnnouncementsPage() {
 
   const canCreate = ['CHURCH_ADMIN', 'PASTOR', 'LEADER'].includes(userRole);
 
-  const fetch = async () => {
+  const fetchData = async () => {
     try {
       const { data } = await api.get('/announcements?limit=50&sortBy=createdAt&sortOrder=desc');
       setItems(data.data?.data || []);
@@ -45,7 +45,7 @@ export default function AnnouncementsPage() {
     }
   };
 
-  useEffect(() => { fetch(); }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,7 +54,7 @@ export default function AnnouncementsPage() {
       toast.success('Announcement created');
       setShowForm(false);
       setForm({ title: '', content: '', priority: 'MEDIUM' });
-      fetch();
+      fetchData();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || 'Failed to create');
     }
@@ -64,7 +64,7 @@ export default function AnnouncementsPage() {
     <AppShell>
       {/* Header row */}
       <div className="flex items-center justify-between mb-5">
-        <h2 className="text-lg font-bold text-gray-800">Announcements</h2>
+        <h2 className="text-lg font-bold text-foreground">Announcements</h2>
         {canCreate && (
           <button
             onClick={() => setShowForm(!showForm)}
@@ -78,28 +78,40 @@ export default function AnnouncementsPage() {
 
       {/* Create form */}
       {showForm && (
-        <form onSubmit={handleCreate} className="bg-white rounded-xl border shadow-sm p-4 mb-5 space-y-3">
+        <form onSubmit={handleCreate} className="bg-card rounded-xl border border-border shadow-sm p-4 mb-5 space-y-3">
           <input
-            required value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+            required value={form.title}
+            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
             placeholder="Title"
-            className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground
+                       text-sm focus:outline-none focus:ring-2 focus:ring-ring
+                       placeholder:text-muted-foreground"
           />
           <textarea
-            required value={form.content} onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
+            required value={form.content}
+            onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
             placeholder="Write your announcement…"
             rows={3}
-            className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground
+                       text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none
+                       placeholder:text-muted-foreground"
           />
           <select
-            value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
-            className="px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            value={form.priority}
+            onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
+            className="px-3 py-2 rounded-lg border border-border bg-background text-foreground
+                       text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="LOW">Low</option>
             <option value="MEDIUM">Medium</option>
             <option value="HIGH">High</option>
             <option value="URGENT">Urgent</option>
           </select>
-          <button type="submit" className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ backgroundColor: primary }}>
+          <button
+            type="submit"
+            className="px-4 py-2 rounded-lg text-white text-sm font-medium"
+            style={{ backgroundColor: primary }}
+          >
             Post Announcement
           </button>
         </form>
@@ -108,16 +120,16 @@ export default function AnnouncementsPage() {
       {/* List */}
       <div className="space-y-3">
         {loading ? (
-          <p className="text-gray-400 text-sm">Loading…</p>
+          <p className="text-muted-foreground text-sm">Loading…</p>
         ) : items.length === 0 ? (
-          <div className="bg-white rounded-xl border p-8 text-center">
-            <p className="text-gray-500 text-sm">No announcements yet.</p>
+          <div className="bg-card rounded-xl border border-border p-8 text-center">
+            <p className="text-muted-foreground text-sm">No announcements yet.</p>
           </div>
         ) : (
           items.map((item) => (
-            <div key={item.id} className="bg-white rounded-xl border shadow-sm p-4">
+            <div key={item.id} className="bg-card rounded-xl border border-border shadow-sm p-4">
               <div className="flex items-start justify-between">
-                <h3 className="font-semibold text-gray-800">{item.title}</h3>
+                <h3 className="font-semibold text-foreground">{item.title}</h3>
                 <span
                   className="text-xs font-medium px-2 py-0.5 rounded-full text-white"
                   style={{ backgroundColor: PRIORITY_COLORS[item.priority] || '#9CA3AF' }}
@@ -125,9 +137,10 @@ export default function AnnouncementsPage() {
                   {item.priority}
                 </span>
               </div>
-              <p className="text-sm text-gray-600 mt-1">{item.content}</p>
-              <p className="text-xs text-gray-400 mt-2">
-                By {item.author?.firstName} {item.author?.lastName} · {new Date(item.createdAt).toLocaleDateString()}
+              <p className="text-sm text-muted-foreground mt-1">{item.content}</p>
+              <p className="text-xs text-muted-foreground mt-2">
+                By {item.author?.firstName} {item.author?.lastName}
+                {' · '}{new Date(item.createdAt).toLocaleDateString()}
               </p>
             </div>
           ))

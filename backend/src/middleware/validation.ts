@@ -6,10 +6,15 @@ export const validate = (
   req: Request,
   res: Response,
   next: NextFunction
-): void => {                                   // ← explicit void return type
+): void => {
   const errors = validationResult(req);
 
   if (!errors.isEmpty()) {
+    // ✅ Add logging to see what's failing
+    console.log('Validation failed for:', req.method, req.path);
+    console.log('Params:', req.params);
+    console.log('Errors:', errors.array());
+    
     const errorMessages = errors.array().map((err) => ({
       field: err.type === 'field' ? (err as any).path : undefined,
       message: err.msg,
@@ -18,8 +23,8 @@ export const validate = (
     res.status(400).json(
       errorResponse('Validation failed', errorMessages)
     );
-    return;                                    // ← explicit return, no value
+    return;
   }
 
-  next();                                      // ← falls through here cleanly
+  next();
 };
