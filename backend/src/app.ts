@@ -15,6 +15,7 @@ import passport from './config/passport';
 import './config/passport';
 
 const app: Application = express();
+app.set('trust proxy', 1);
 
 app.use(
   helmet({

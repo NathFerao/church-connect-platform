@@ -3,7 +3,7 @@ import { config } from '../config/constants';
 
 export const apiLimiter = rateLimit({
   windowMs: config.rateLimit.windowMs,
-  max: config.nodeEnv === 'development' ? 1000 : config.rateLimit.maxRequests, // Much higher in dev
+  max: config.nodeEnv === 'development' ? 1000 : 500, // Much higher in dev
   message: 'Too many requests from this IP, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
@@ -19,7 +19,7 @@ export const apiLimiter = rateLimit({
 
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: config.nodeEnv === 'development' ? 100 : 5, // Much higher in dev
+  max: config.nodeEnv === 'development' ? 100 : 20, // Much higher in dev
   message: 'Too many login attempts, please try again later',
   skipSuccessfulRequests: true,
   // Skip in development
