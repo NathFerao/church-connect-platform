@@ -19,7 +19,7 @@ router.post(
   '/register',
   authLimiter,
   [
-    body('email').isEmail().normalizeEmail(),
+    body('email').isEmail(),
     body('password').isLength({ min: 8 }),
     body('firstName').notEmpty().trim(),
     body('lastName').notEmpty().trim(),
@@ -32,7 +32,7 @@ router.post(
   '/login',
   authLimiter,
   [
-    body('email').isEmail().normalizeEmail(),
+    body('email').isEmail(),
     body('password').notEmpty(),
     validate,
   ],
@@ -56,7 +56,7 @@ router.get('/profile', authenticate, authController.getProfile);
 
 router.post(
   '/forgot-password',
-  [body('email').isEmail().normalizeEmail(), validate],
+  [body('email').isEmail(), validate],
   authController.requestPasswordReset
 );
 

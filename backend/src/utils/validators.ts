@@ -1,7 +1,7 @@
 import { body, param, query, ValidationChain } from 'express-validator';
 
 export const validators = {
-  email: () => body('email').isEmail().normalizeEmail(),
+  email: () => body('email').isEmail(),
   
   password: () =>
     body('password')

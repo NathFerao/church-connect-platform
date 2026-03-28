@@ -13,7 +13,7 @@ router.post(
   '/register',
   [
     body('name').notEmpty().trim(),
-    body('adminEmail').isEmail().normalizeEmail(),
+    body('adminEmail').isEmail(),
     body('adminPassword').isLength({ min: 8 }),
     body('adminFirstName').notEmpty().trim(),
     body('adminLastName').notEmpty().trim(),
@@ -34,7 +34,7 @@ router.put(
   authorize('CHURCH_ADMIN', 'SUPER_ADMIN'),
   [
     body('name').optional().trim(),
-    body('email').optional().isEmail().normalizeEmail(),
+    body('email').optional().isEmail(),
     body('primaryColor').optional().matches(/^#[0-9A-F]{6}$/i),  // Hex color
     body('secondaryColor').optional().matches(/^#[0-9A-F]{6}$/i),
     validate,

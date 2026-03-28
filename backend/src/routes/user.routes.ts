@@ -20,7 +20,7 @@ router.put(
   [
     body('firstName').optional().trim().notEmpty(),
     body('lastName').optional().trim().notEmpty(),
-    body('email').optional().isEmail().normalizeEmail(),
+    body('email').optional().isEmail(),
     body('currentPassword').optional().isString(),
     body('newPassword').optional().isLength({ min: 8 }),
     validate,
@@ -38,7 +38,7 @@ router.post(
   [
     body('firstName').notEmpty().trim(),
     body('lastName').notEmpty().trim(),
-    body('email').isEmail().normalizeEmail(),
+    body('email').isEmail(),
     body('password').isLength({ min: 8 }),
     body('role').optional().isIn(['MEMBER', 'LEADER', 'PASTOR', 'CHURCH_ADMIN']),
     validate,
@@ -74,7 +74,7 @@ router.post(
   '/assign-to-church',
   authorize('CHURCH_ADMIN', 'SUPER_ADMIN'),
   [
-    body('email').isEmail().normalizeEmail(),
+    body('email').isEmail(),
     body('role')
       .optional()
       .isIn(['MEMBER', 'LEADER', 'PASTOR', 'CHURCH_ADMIN'])
