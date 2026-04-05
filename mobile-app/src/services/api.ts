@@ -5,10 +5,10 @@ import * as SecureStore from 'expo-secure-store';
 // On emulator/simulator, localhost works fine
 const API_BASE = __DEV__ 
   ? 'http://192.168.0.35:5000/api/v1'  // For Android emulator use 10.0.2.2:5000
-  : 'https://your-production-api.com/api/v1';
+  : 'https://church-connect-api-qylf.onrender.com/api/v1';
 
 const api = axios.create({
-  baseURL: process.env.EXPO_PUBLIC_API_URL ?? 'https://church-connect-api-qylf.onrender.com/api/v1',
+  baseURL: process.env.EXPO_PUBLIC_API_URL ?? 'https://church-connect-api-qylf.onrender.com/api/v1'
 });
 
 // Request interceptor - attach token
