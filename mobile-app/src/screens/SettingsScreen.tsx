@@ -1,15 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View, StyleSheet, ScrollView, Alert, TouchableOpacity, Switch,
-} from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, Switch } from 'react-native';
 import { Text, TextInput, Button, Divider, Avatar, Surface, Icon } from 'react-native-paper';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MoreStackParamList } from '../navigation/AppNavigator';
 import api from '../services/api';
 import { useAuthStore } from '../stores/auth.store';
+import { useThemeStore } from '../stores/theme.store';
 import { useAppTheme } from '../hooks/useAppTheme';
-
-// ─── Constants ────────────────────────────────────────────────────────────────
 
 type ActiveSection = 'profile' | 'password' | 'appearance';
 
@@ -27,23 +24,19 @@ const ADMIN_ROLES = ['SUPER_ADMIN', 'CHURCH_ADMIN'];
 
 type Props = NativeStackScreenProps<MoreStackParamList, 'Settings'>;
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
 export default function SettingsScreen({ navigation }: Props) {
   const { user, church, updateUser, logout } = useAuthStore();
   const { isDark, c, primary } = useAppTheme();
-  const { toggleDark } = require('../stores/theme.store').useThemeStore();
+  const { toggleDark } = useThemeStore();
 
   const isAdmin = ADMIN_ROLES.includes(user?.role ?? '');
 
-  // Profile fields
   const [firstName, setFirstName] = useState(user?.firstName ?? '');
   const [lastName, setLastName] = useState(user?.lastName ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [bio, setBio] = useState(user?.bio ?? '');
   const [savingProfile, setSavingProfile] = useState(false);
 
-  // Password fields
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -61,12 +54,8 @@ export default function SettingsScreen({ navigation }: Props) {
     setBio(user?.bio ?? '');
   }, [user]);
 
-  // ── Save profile ───────────────────────────────────────────────────────────
-
   const handleSaveProfile = async () => {
-    if (!firstName.trim() || !lastName.trim()) {
-      Alert.alert('Error', 'First and last name are required'); return;
-    }
+    if (!firstName.trim() || !lastName.trim()) { Alert.alert('Error', 'First and last name are required'); return; }
     setSavingProfile(true);
     try {
       const { data } = await api.put('/users/profile', {
@@ -77,23 +66,13 @@ export default function SettingsScreen({ navigation }: Props) {
       Alert.alert('Saved', 'Your profile has been updated');
     } catch (error: any) {
       Alert.alert('Error', error?.response?.data?.error || 'Could not save profile');
-    } finally {
-      setSavingProfile(false);
-    }
+    } finally { setSavingProfile(false); }
   };
 
-  // ── Change password ────────────────────────────────────────────────────────
-
   const handleChangePassword = async () => {
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all password fields'); return;
-    }
-    if (newPassword.length < 8) {
-      Alert.alert('Error', 'New password must be at least 8 characters'); return;
-    }
-    if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'New passwords do not match'); return;
-    }
+    if (!currentPassword || !newPassword || !confirmPassword) { Alert.alert('Error', 'Please fill in all password fields'); return; }
+    if (newPassword.length < 8) { Alert.alert('Error', 'New password must be at least 8 characters'); return; }
+    if (newPassword !== confirmPassword) { Alert.alert('Error', 'New passwords do not match'); return; }
     setSavingPassword(true);
     try {
       await api.put('/users/profile', { currentPassword, newPassword });
@@ -101,12 +80,8 @@ export default function SettingsScreen({ navigation }: Props) {
       Alert.alert('Done', 'Password changed successfully');
     } catch (error: any) {
       Alert.alert('Error', error?.response?.data?.error || 'Could not change password');
-    } finally {
-      setSavingPassword(false);
-    }
+    } finally { setSavingPassword(false); }
   };
-
-  // ── Logout ─────────────────────────────────────────────────────────────────
 
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -119,55 +94,45 @@ export default function SettingsScreen({ navigation }: Props) {
   const roleColor = ROLE_COLORS[user?.role ?? ''] ?? '#6B7280';
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: c.background }]}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
-      {/* ── Avatar / name header ── */}
+    <ScrollView style={[styles.container, { backgroundColor: c.background }]}
+      contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled">
+
+      {/* Header */}
       <View style={styles.header}>
-        <Avatar.Text size={72} label={initials}
-          style={{ backgroundColor: roleColor }} labelStyle={styles.avatarLabel} />
+        {user?.avatarUrl ? (
+          <Avatar.Image size={72} source={{ uri: user.avatarUrl }} />
+        ) : (
+          <Avatar.Text size={72} label={initials} style={{ backgroundColor: roleColor }} labelStyle={styles.avatarLabel} />
+        )}
         <Text variant="headlineSmall" style={[styles.fullName, { color: c.text }]}>
           {user?.firstName} {user?.lastName}
         </Text>
         <Text variant="bodySmall" style={[styles.roleTag, { color: roleColor }]}>
-          {ROLE_LABELS[user?.role ?? ''] ?? user?.role}
-          {church ? `  ·  ${church.name}` : ''}
+          {ROLE_LABELS[user?.role ?? ''] ?? user?.role}{church ? `  ·  ${church.name}` : ''}
         </Text>
         <Text variant="bodySmall" style={{ color: c.textSecondary }}>{user?.email}</Text>
       </View>
 
-      {/* ── Church Settings button (admins only) ── */}
+      {/* Church Settings button (admins only) */}
       {isAdmin && (
         <TouchableOpacity
           style={[styles.churchSettingsBtn, { backgroundColor: c.surface, borderColor: primary }]}
-          onPress={() => navigation.navigate('ChurchSettings')}
-          activeOpacity={0.8}
-        >
+          onPress={() => navigation.navigate('ChurchSettings')} activeOpacity={0.8}>
           <View style={[styles.churchSettingsIcon, { backgroundColor: `${primary}15` }]}>
             <Icon source="church" size={20} color={primary} />
           </View>
           <View style={styles.churchSettingsText}>
-            <Text variant="bodyMedium" style={[styles.churchSettingsTitle, { color: c.text }]}>
-              Church Settings
-            </Text>
-            <Text variant="bodySmall" style={{ color: c.textSecondary }}>
-              Name, branding colours, contact info
-            </Text>
+            <Text variant="bodyMedium" style={[styles.churchSettingsTitle, { color: c.text }]}>Church Settings</Text>
+            <Text variant="bodySmall" style={{ color: c.textSecondary }}>Name, logo, branding colours, contact info</Text>
           </View>
           <Icon source="chevron-right" size={20} color={c.textSecondary} />
         </TouchableOpacity>
       )}
 
-      {/* ── Section tabs ── */}
+      {/* Tabs */}
       <View style={[styles.tabs, { backgroundColor: isDark ? '#374151' : '#F3F4F6' }]}>
-        {([
-          { key: 'profile', label: 'Profile' },
-          { key: 'password', label: 'Password' },
-          { key: 'appearance', label: 'Appearance' },
-        ] as { key: ActiveSection; label: string }[]).map((tab) => (
+        {([{ key: 'profile', label: 'Profile' }, { key: 'password', label: 'Password' }, { key: 'appearance', label: 'Appearance' }] as { key: ActiveSection; label: string }[]).map((tab) => (
           <TouchableOpacity key={tab.key}
             style={[styles.tab, activeSection === tab.key && [styles.tabActive, { backgroundColor: isDark ? '#1F2937' : 'white' }]]}
             onPress={() => setActiveSection(tab.key)}>
@@ -179,7 +144,7 @@ export default function SettingsScreen({ navigation }: Props) {
         ))}
       </View>
 
-      {/* ── Profile ── */}
+      {/* Profile */}
       {activeSection === 'profile' && (
         <Surface style={[styles.section, { backgroundColor: c.surface }]} elevation={1}>
           <Text variant="titleMedium" style={[styles.sectionTitle, { color: c.text }]}>Edit Profile</Text>
@@ -193,14 +158,13 @@ export default function SettingsScreen({ navigation }: Props) {
             style={styles.input} mode="outlined" keyboardType="phone-pad" />
           <TextInput label="Bio (optional)" value={bio} onChangeText={setBio}
             style={styles.input} mode="outlined" multiline numberOfLines={3} />
-          <Button mode="contained" onPress={handleSaveProfile}
-            loading={savingProfile} disabled={savingProfile} style={styles.saveBtn}>
+          <Button mode="contained" onPress={handleSaveProfile} loading={savingProfile} disabled={savingProfile} style={styles.saveBtn}>
             Save Changes
           </Button>
         </Surface>
       )}
 
-      {/* ── Password ── */}
+      {/* Password */}
       {activeSection === 'password' && (
         <Surface style={[styles.section, { backgroundColor: c.surface }]} elevation={1}>
           <Text variant="titleMedium" style={[styles.sectionTitle, { color: c.text }]}>Change Password</Text>
@@ -216,17 +180,14 @@ export default function SettingsScreen({ navigation }: Props) {
             secureTextEntry={!showConfirm}
             right={<TextInput.Icon icon={showConfirm ? 'eye-off' : 'eye'} onPress={() => setShowConfirm((v) => !v)} />}
             style={styles.input} mode="outlined" />
-          <Text variant="bodySmall" style={[styles.hint, { color: c.textSecondary }]}>
-            Password must be at least 8 characters
-          </Text>
-          <Button mode="contained" onPress={handleChangePassword}
-            loading={savingPassword} disabled={savingPassword} style={styles.saveBtn}>
+          <Text variant="bodySmall" style={[styles.hint, { color: c.textSecondary }]}>Password must be at least 8 characters</Text>
+          <Button mode="contained" onPress={handleChangePassword} loading={savingPassword} disabled={savingPassword} style={styles.saveBtn}>
             Update Password
           </Button>
         </Surface>
       )}
 
-      {/* ── Appearance ── */}
+      {/* Appearance */}
       {activeSection === 'appearance' && (
         <Surface style={[styles.section, { backgroundColor: c.surface }]} elevation={1}>
           <Text variant="titleMedium" style={[styles.sectionTitle, { color: c.text }]}>Appearance</Text>
@@ -242,9 +203,7 @@ export default function SettingsScreen({ navigation }: Props) {
           <Divider style={styles.rowDivider} />
           {church && (
             <>
-              <Text variant="labelSmall" style={[styles.fieldLabel, { color: c.textSecondary }]}>
-                CHURCH BRANDING
-              </Text>
+              <Text variant="labelSmall" style={[styles.fieldLabel, { color: c.textSecondary }]}>CHURCH BRANDING</Text>
               <View style={styles.churchRow}>
                 <Text variant="bodyMedium" style={{ color: c.text }}>{church.name}</Text>
               </View>
@@ -280,18 +239,13 @@ export default function SettingsScreen({ navigation }: Props) {
       )}
 
       <Divider style={styles.divider} />
-      <Button mode="outlined" onPress={handleLogout} icon="logout"
-        style={styles.logoutBtn} textColor="#EF4444">
+      <Button mode="outlined" onPress={handleLogout} icon="logout" style={styles.logoutBtn} textColor="#EF4444">
         Sign Out
       </Button>
-      <Text variant="bodySmall" style={[styles.version, { color: c.textSecondary }]}>
-        Church Connect
-      </Text>
+      <Text variant="bodySmall" style={[styles.version, { color: c.textSecondary }]}>Church Connect</Text>
     </ScrollView>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -300,10 +254,7 @@ const styles = StyleSheet.create({
   avatarLabel: { fontSize: 26, fontWeight: '700' },
   fullName: { fontWeight: 'bold', marginTop: 12 },
   roleTag: { marginTop: 4, fontWeight: '600', marginBottom: 4 },
-  churchSettingsBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderWidth: 1.5, borderRadius: 12, padding: 14, marginBottom: 16,
-  },
+  churchSettingsBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1.5, borderRadius: 12, padding: 14, marginBottom: 16 },
   churchSettingsIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   churchSettingsText: { flex: 1 },
   churchSettingsTitle: { fontWeight: '600' },

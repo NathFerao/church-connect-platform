@@ -164,8 +164,6 @@ export default function EventsScreen() {
       } else {
         await api.post(`/events/${event.id}/register`);
       }
-      // Refresh in background to sync real server state
-      fetchEvents();
     } catch (error: any) {
       // Revert optimistic update on failure
       setEvents((prev) =>
