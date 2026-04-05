@@ -92,11 +92,11 @@ function MoreNavigator() {
         component={MoreScreen}
         options={{ title: 'More', headerShown: false }}
       />
-      {/* <MoreStack.Screen
+      <MoreStack.Screen
         name="Members"
         component={MembersScreen}
         options={{ title: 'Members Directory' }}
-      /> */}
+      />
       <MoreStack.Screen
         name="Settings"
         component={SettingsScreen}

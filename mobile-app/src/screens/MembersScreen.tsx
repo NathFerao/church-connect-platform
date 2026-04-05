@@ -1,285 +1,167 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, Switch } from 'react-native';
-import { Text, TextInput, Button, Divider, Avatar, Surface, Icon } from 'react-native-paper';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { MoreStackParamList } from '../navigation/AppNavigator';
+import React, { useEffect, useState, useMemo } from 'react';
+import { View, StyleSheet, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Text, Chip, Avatar, Searchbar, ActivityIndicator } from 'react-native-paper';
 import api from '../services/api';
-import { useAuthStore } from '../stores/auth.store';
-import { useThemeStore } from '../stores/theme.store';
 import { useAppTheme } from '../hooks/useAppTheme';
 
-type ActiveSection = 'profile' | 'password' | 'appearance';
+interface Member {
+  id: string; firstName: string; lastName: string;
+  email: string; role: string; isActive: boolean; avatarUrl: string | null;
+}
 
-const ROLE_LABELS: Record<string, string> = {
-  SUPER_ADMIN: 'Super Admin', CHURCH_ADMIN: 'Church Admin',
-  PASTOR: 'Pastor', LEADER: 'Leader', MEMBER: 'Member',
-};
+type RoleFilter = 'ALL' | 'MEMBER' | 'LEADER' | 'PASTOR' | 'CHURCH_ADMIN';
+
+const ROLE_FILTERS: { label: string; value: RoleFilter }[] = [
+  { label: 'All', value: 'ALL' }, { label: 'Member', value: 'MEMBER' },
+  { label: 'Leader', value: 'LEADER' }, { label: 'Pastor', value: 'PASTOR' },
+  { label: 'Admin', value: 'CHURCH_ADMIN' },
+];
 
 const ROLE_COLORS: Record<string, string> = {
   SUPER_ADMIN: '#DC2626', CHURCH_ADMIN: '#7C3AED',
   PASTOR: '#2563EB', LEADER: '#059669', MEMBER: '#6B7280',
 };
 
-const ADMIN_ROLES = ['SUPER_ADMIN', 'CHURCH_ADMIN'];
+const ROLE_LABELS: Record<string, string> = {
+  SUPER_ADMIN: 'Super Admin', CHURCH_ADMIN: 'Admin',
+  PASTOR: 'Pastor', LEADER: 'Leader', MEMBER: 'Member',
+};
 
-type Props = NativeStackScreenProps<MoreStackParamList, 'Settings'>;
+function getInitials(firstName: string, lastName: string) {
+  return `${firstName?.[0] ?? ''}${lastName?.[0] ?? ''}`.toUpperCase();
+}
 
-export default function SettingsScreen({ navigation }: Props) {
-  const { user, church, updateUser, logout } = useAuthStore();
+export default function MembersScreen() {
   const { isDark, c, primary } = useAppTheme();
-  const { toggleDark } = useThemeStore();
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('ALL');
 
-  const isAdmin = ADMIN_ROLES.includes(user?.role ?? '');
-
-  const [firstName, setFirstName] = useState(user?.firstName ?? '');
-  const [lastName, setLastName] = useState(user?.lastName ?? '');
-  const [phone, setPhone] = useState(user?.phone ?? '');
-  const [bio, setBio] = useState(user?.bio ?? '');
-  const [savingProfile, setSavingProfile] = useState(false);
-
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrent, setShowCurrent] = useState(false);
-  const [showNew, setShowNew] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [savingPassword, setSavingPassword] = useState(false);
-
-  const [activeSection, setActiveSection] = useState<ActiveSection>('profile');
-
-  useEffect(() => {
-    setFirstName(user?.firstName ?? '');
-    setLastName(user?.lastName ?? '');
-    setPhone(user?.phone ?? '');
-    setBio(user?.bio ?? '');
-  }, [user]);
-
-  const handleSaveProfile = async () => {
-    if (!firstName.trim() || !lastName.trim()) { Alert.alert('Error', 'First and last name are required'); return; }
-    setSavingProfile(true);
+  const fetchMembers = async () => {
     try {
-      const { data } = await api.put('/users/profile', {
-        firstName: firstName.trim(), lastName: lastName.trim(),
-        phone: phone.trim() || undefined, bio: bio.trim() || undefined,
-      });
-      await updateUser(data.data?.user ?? data.data);
-      Alert.alert('Saved', 'Your profile has been updated');
-    } catch (error: any) {
-      Alert.alert('Error', error?.response?.data?.error || 'Could not save profile');
-    } finally { setSavingProfile(false); }
+      const { data } = await api.get('/users/church-members?limit=200');
+      setMembers(data.data?.data || []);
+    } catch { /* silent */ } finally { setLoading(false); }
   };
 
-  const handleChangePassword = async () => {
-    if (!currentPassword || !newPassword || !confirmPassword) { Alert.alert('Error', 'Please fill in all password fields'); return; }
-    if (newPassword.length < 8) { Alert.alert('Error', 'New password must be at least 8 characters'); return; }
-    if (newPassword !== confirmPassword) { Alert.alert('Error', 'New passwords do not match'); return; }
-    setSavingPassword(true);
-    try {
-      await api.put('/users/profile', { currentPassword, newPassword });
-      setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
-      Alert.alert('Done', 'Password changed successfully');
-    } catch (error: any) {
-      Alert.alert('Error', error?.response?.data?.error || 'Could not change password');
-    } finally { setSavingPassword(false); }
+  useEffect(() => { fetchMembers(); }, []);
+  const onRefresh = async () => { setRefreshing(true); await fetchMembers(); setRefreshing(false); };
+
+  const filtered = useMemo(() => {
+    let result = members;
+    if (roleFilter !== 'ALL') result = result.filter((m) => m.role === roleFilter);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      result = result.filter((m) =>
+        m.firstName.toLowerCase().includes(q) ||
+        m.lastName.toLowerCase().includes(q) ||
+        m.email.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [members, search, roleFilter]);
+
+  const renderMember = ({ item }: { item: Member }) => {
+    const roleColor = ROLE_COLORS[item.role] ?? '#6B7280';
+    return (
+      <View style={styles.row}>
+        {item.avatarUrl ? (
+          <Avatar.Image size={44} source={{ uri: item.avatarUrl }} />
+        ) : (
+          <Avatar.Text size={44} label={getInitials(item.firstName, item.lastName)}
+            style={{ backgroundColor: roleColor }} labelStyle={styles.avatarLabel} />
+        )}
+        <View style={styles.info}>
+          <Text variant="titleSmall" style={[styles.name, { color: c.text }]}>
+            {item.firstName} {item.lastName}
+          </Text>
+          <Text variant="bodySmall" style={{ color: c.textSecondary, marginTop: 2 }} numberOfLines={1}>
+            {item.email}
+          </Text>
+        </View>
+        <Chip compact textStyle={{ color: 'white', fontSize: 10 }} style={{ backgroundColor: roleColor }}>
+          {ROLE_LABELS[item.role] ?? item.role}
+        </Chip>
+      </View>
+    );
   };
 
-  const handleLogout = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: logout },
-    ]);
-  };
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={['top']}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
-  const initials = `${user?.firstName?.[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
-  const roleColor = ROLE_COLORS[user?.role ?? ''] ?? '#6B7280';
+  const borderColor = isDark ? '#374151' : '#D1D5DB';
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: c.background }]}
-      contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled">
-
-      {/* Header */}
-      <View style={styles.header}>
-        {user?.avatarUrl ? (
-          <Avatar.Image size={72} source={{ uri: user.avatarUrl }} />
-        ) : (
-          <Avatar.Text size={72} label={initials} style={{ backgroundColor: roleColor }} labelStyle={styles.avatarLabel} />
-        )}
-        <Text variant="headlineSmall" style={[styles.fullName, { color: c.text }]}>
-          {user?.firstName} {user?.lastName}
-        </Text>
-        <Text variant="bodySmall" style={[styles.roleTag, { color: roleColor }]}>
-          {ROLE_LABELS[user?.role ?? ''] ?? user?.role}{church ? `  ·  ${church.name}` : ''}
-        </Text>
-        <Text variant="bodySmall" style={{ color: c.textSecondary }}>{user?.email}</Text>
-      </View>
-
-      {/* Church Settings button (admins only) */}
-      {isAdmin && (
-        <TouchableOpacity
-          style={[styles.churchSettingsBtn, { backgroundColor: c.surface, borderColor: primary }]}
-          onPress={() => navigation.navigate('ChurchSettings')} activeOpacity={0.8}>
-          <View style={[styles.churchSettingsIcon, { backgroundColor: `${primary}15` }]}>
-            <Icon source="church" size={20} color={primary} />
-          </View>
-          <View style={styles.churchSettingsText}>
-            <Text variant="bodyMedium" style={[styles.churchSettingsTitle, { color: c.text }]}>Church Settings</Text>
-            <Text variant="bodySmall" style={{ color: c.textSecondary }}>Name, logo, branding colours, contact info</Text>
-          </View>
-          <Icon source="chevron-right" size={20} color={c.textSecondary} />
-        </TouchableOpacity>
-      )}
-
-      {/* Tabs */}
-      <View style={[styles.tabs, { backgroundColor: isDark ? '#374151' : '#F3F4F6' }]}>
-        {([{ key: 'profile', label: 'Profile' }, { key: 'password', label: 'Password' }, { key: 'appearance', label: 'Appearance' }] as { key: ActiveSection; label: string }[]).map((tab) => (
-          <TouchableOpacity key={tab.key}
-            style={[styles.tab, activeSection === tab.key && [styles.tabActive, { backgroundColor: isDark ? '#1F2937' : 'white' }]]}
-            onPress={() => setActiveSection(tab.key)}>
-            <Text style={[styles.tabText, { color: activeSection === tab.key ? primary : c.textSecondary },
-              activeSection === tab.key && styles.tabTextActive]}>
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Profile */}
-      {activeSection === 'profile' && (
-        <Surface style={[styles.section, { backgroundColor: c.surface }]} elevation={1}>
-          <Text variant="titleMedium" style={[styles.sectionTitle, { color: c.text }]}>Edit Profile</Text>
-          <View style={styles.nameRow}>
-            <TextInput label="First Name" value={firstName} onChangeText={setFirstName}
-              style={[styles.input, styles.nameInput]} mode="outlined" autoCapitalize="words" />
-            <TextInput label="Last Name" value={lastName} onChangeText={setLastName}
-              style={[styles.input, styles.nameInput]} mode="outlined" autoCapitalize="words" />
-          </View>
-          <TextInput label="Phone (optional)" value={phone} onChangeText={setPhone}
-            style={styles.input} mode="outlined" keyboardType="phone-pad" />
-          <TextInput label="Bio (optional)" value={bio} onChangeText={setBio}
-            style={styles.input} mode="outlined" multiline numberOfLines={3} />
-          <Button mode="contained" onPress={handleSaveProfile} loading={savingProfile} disabled={savingProfile} style={styles.saveBtn}>
-            Save Changes
-          </Button>
-        </Surface>
-      )}
-
-      {/* Password */}
-      {activeSection === 'password' && (
-        <Surface style={[styles.section, { backgroundColor: c.surface }]} elevation={1}>
-          <Text variant="titleMedium" style={[styles.sectionTitle, { color: c.text }]}>Change Password</Text>
-          <TextInput label="Current Password" value={currentPassword} onChangeText={setCurrentPassword}
-            secureTextEntry={!showCurrent}
-            right={<TextInput.Icon icon={showCurrent ? 'eye-off' : 'eye'} onPress={() => setShowCurrent((v) => !v)} />}
-            style={styles.input} mode="outlined" />
-          <TextInput label="New Password" value={newPassword} onChangeText={setNewPassword}
-            secureTextEntry={!showNew}
-            right={<TextInput.Icon icon={showNew ? 'eye-off' : 'eye'} onPress={() => setShowNew((v) => !v)} />}
-            style={styles.input} mode="outlined" />
-          <TextInput label="Confirm New Password" value={confirmPassword} onChangeText={setConfirmPassword}
-            secureTextEntry={!showConfirm}
-            right={<TextInput.Icon icon={showConfirm ? 'eye-off' : 'eye'} onPress={() => setShowConfirm((v) => !v)} />}
-            style={styles.input} mode="outlined" />
-          <Text variant="bodySmall" style={[styles.hint, { color: c.textSecondary }]}>Password must be at least 8 characters</Text>
-          <Button mode="contained" onPress={handleChangePassword} loading={savingPassword} disabled={savingPassword} style={styles.saveBtn}>
-            Update Password
-          </Button>
-        </Surface>
-      )}
-
-      {/* Appearance */}
-      {activeSection === 'appearance' && (
-        <Surface style={[styles.section, { backgroundColor: c.surface }]} elevation={1}>
-          <Text variant="titleMedium" style={[styles.sectionTitle, { color: c.text }]}>Appearance</Text>
-          <View style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-              <Text variant="bodyLarge" style={{ color: c.text }}>Dark Mode</Text>
-              <Text variant="bodySmall" style={{ color: c.textSecondary }}>Easier on the eyes in low light</Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={['top']}>
+      <FlatList
+        data={filtered}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={
+          <View>
+            <Text variant="headlineSmall" style={[styles.heading, { color: c.text }]}>Members</Text>
+            <Searchbar placeholder="Search by name or email" value={search} onChangeText={setSearch}
+              style={[styles.searchbar, { backgroundColor: c.surface, borderColor }]}
+              inputStyle={[styles.searchInput, { color: c.text }]}
+              placeholderTextColor={c.textSecondary} />
+            <View style={styles.filters}>
+              {ROLE_FILTERS.map((f) => (
+                <TouchableOpacity key={f.value}
+                  style={[styles.filterChip, { borderColor },
+                    roleFilter === f.value && { borderColor: primary, backgroundColor: `${primary}15` }]}
+                  onPress={() => setRoleFilter(f.value)}>
+                  <Text style={[styles.filterChipText, { color: c.textSecondary },
+                    roleFilter === f.value && { color: primary, fontWeight: '600' }]}>
+                    {f.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
-            <Switch value={isDark} onValueChange={toggleDark}
-              trackColor={{ false: '#D1D5DB', true: `${primary}80` }}
-              thumbColor={isDark ? primary : '#F3F4F6'} />
+            <Text variant="bodySmall" style={{ color: c.textSecondary, marginBottom: 8 }}>
+              {filtered.length} member{filtered.length !== 1 ? 's' : ''}
+            </Text>
           </View>
-          <Divider style={styles.rowDivider} />
-          {church && (
-            <>
-              <Text variant="labelSmall" style={[styles.fieldLabel, { color: c.textSecondary }]}>CHURCH BRANDING</Text>
-              <View style={styles.churchRow}>
-                <Text variant="bodyMedium" style={{ color: c.text }}>{church.name}</Text>
-              </View>
-              <View style={styles.colorRow}>
-                <View style={styles.colorSwatch}>
-                  <View style={[styles.colorDot, { backgroundColor: church.primaryColor }]} />
-                  <View>
-                    <Text variant="bodySmall" style={{ color: c.text }}>Primary</Text>
-                    <Text variant="bodySmall" style={{ color: c.textSecondary }}>{church.primaryColor}</Text>
-                  </View>
-                </View>
-                <View style={styles.colorSwatch}>
-                  <View style={[styles.colorDot, { backgroundColor: church.secondaryColor }]} />
-                  <View>
-                    <Text variant="bodySmall" style={{ color: c.text }}>Secondary</Text>
-                    <Text variant="bodySmall" style={{ color: c.textSecondary }}>{church.secondaryColor}</Text>
-                  </View>
-                </View>
-              </View>
-              {isAdmin ? (
-                <Button mode="outlined" onPress={() => navigation.navigate('ChurchSettings')}
-                  style={{ marginTop: 8 }} icon="pencil">
-                  Edit Church Branding
-                </Button>
-              ) : (
-                <Text variant="bodySmall" style={[styles.brandingNote, { color: c.textSecondary }]}>
-                  Colors are set by your church administrator.
-                </Text>
-              )}
-            </>
-          )}
-        </Surface>
-      )}
-
-      <Divider style={styles.divider} />
-      <Button mode="outlined" onPress={handleLogout} icon="logout" style={styles.logoutBtn} textColor="#EF4444">
-        Sign Out
-      </Button>
-      <Text variant="bodySmall" style={[styles.version, { color: c.textSecondary }]}>Church Connect</Text>
-    </ScrollView>
+        }
+        ItemSeparatorComponent={() => (
+          <View style={[styles.separator, { backgroundColor: isDark ? '#1F2937' : '#F3F4F6' }]} />
+        )}
+        renderItem={renderMember}
+        ListEmptyComponent={
+          <Text style={[styles.empty, { color: c.textSecondary }]}>
+            {search || roleFilter !== 'ALL' ? 'No members match your search' : 'No members yet'}
+          </Text>
+        }
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 20, paddingBottom: 48 },
-  header: { alignItems: 'center', marginBottom: 20 },
-  avatarLabel: { fontSize: 26, fontWeight: '700' },
-  fullName: { fontWeight: 'bold', marginTop: 12 },
-  roleTag: { marginTop: 4, fontWeight: '600', marginBottom: 4 },
-  churchSettingsBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1.5, borderRadius: 12, padding: 14, marginBottom: 16 },
-  churchSettingsIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  churchSettingsText: { flex: 1 },
-  churchSettingsTitle: { fontWeight: '600' },
-  tabs: { flexDirection: 'row', borderRadius: 12, padding: 4, marginBottom: 16 },
-  tab: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 10 },
-  tabActive: { elevation: 2, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 4 },
-  tabText: { fontSize: 13 },
-  tabTextActive: { fontWeight: '600' },
-  section: { borderRadius: 12, padding: 16, marginBottom: 8 },
-  sectionTitle: { fontWeight: 'bold', marginBottom: 16 },
-  nameRow: { flexDirection: 'row', gap: 12 },
-  nameInput: { flex: 1 },
-  input: { marginBottom: 12 },
-  hint: { marginBottom: 12, marginTop: -8 },
-  saveBtn: { marginTop: 4 },
-  settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
-  settingInfo: { flex: 1, marginRight: 16 },
-  rowDivider: { marginVertical: 12 },
-  fieldLabel: { letterSpacing: 1, marginBottom: 10 },
-  churchRow: { marginBottom: 12 },
-  colorRow: { flexDirection: 'row', gap: 20, marginBottom: 12 },
-  colorSwatch: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  colorDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: '#E5E7EB' },
-  brandingNote: { fontStyle: 'italic' },
-  divider: { marginVertical: 20 },
-  logoutBtn: { borderColor: '#EF4444' },
-  version: { textAlign: 'center', marginTop: 24 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  list: { padding: 16, paddingBottom: 32 },
+  heading: { fontWeight: 'bold', marginBottom: 12 },
+  searchbar: { marginBottom: 12, elevation: 0, borderWidth: 1 },
+  searchInput: { fontSize: 14 },
+  filters: { flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' },
+  filterChip: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6 },
+  filterChipText: { fontSize: 13 },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 12 },
+  avatarLabel: { fontSize: 15, fontWeight: '700' },
+  info: { flex: 1 },
+  name: { fontWeight: '600' },
+  separator: { height: 1 },
+  empty: { textAlign: 'center', marginTop: 48 },
 });
