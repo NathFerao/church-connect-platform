@@ -13,7 +13,7 @@ import { User } from '@prisma/client';
 const router = Router();
 const authController = new AuthController();
 
-// ─── Existing routes (unchanged) ─────────────────────────────────────────────
+// ─── Standard auth routes ─────────────────────────────────────────────────────
 
 router.post(
   '/register',
@@ -70,18 +70,25 @@ router.post(
   authController.resetPassword
 );
 
-// ─── Google OAuth routes (NEW) ────────────────────────────────────────────────
+// ─── Google OAuth ─────────────────────────────────────────────────────────────
 
-// Step 1: Redirect user to Google consent screen
-router.get(
-  '/google',
+// Step 1: Redirect to Google — encode source + redirect_uri in the state param
+// so they survive the round-trip through Google's servers.
+router.get('/google', (req, res, next) => {
+  const source = (req.query.source as string) || 'web';
+  const redirectUri = (req.query.redirect_uri as string) || '';
+
+  // Pack both values into the OAuth state so Google echoes them back
+  const state = Buffer.from(JSON.stringify({ source, redirectUri })).toString('base64');
+
   passport.authenticate('google', {
     scope: ['profile', 'email'],
     session: false,
-  })
-);
+    state,
+  } as any)(req, res, next);
+});
 
-// Step 2: Google redirects back here with the code
+// Step 2: Google redirects here — unpack state to decide where to redirect
 router.get(
   '/google/callback',
   passport.authenticate('google', {
@@ -91,7 +98,6 @@ router.get(
   (req, res) => {
     const user = req.user as User;
 
-    // Issue the same JWT as regular login
     const payload: JwtPayload = {
       userId: user.id,
       email: user.email,
@@ -102,17 +108,28 @@ router.get(
     const token = jwt.sign(payload, config.jwt.secret as jwt.Secret, {
       expiresIn: config.jwt.expiresIn as jwt.SignOptions['expiresIn'],
     });
-    
-    const isMobile = req.query.source === 'mobile';
-    const redirectBase = isMobile
-      ? (req.query.redirect_uri as string) ?? 'churchconnect://auth/callback'
-      : `${process.env.FRONTEND_URL}/auth/callback`;
-    res.redirect(`${redirectBase}?token=${token}`);
-        // Redirect to frontend callback page with token in query param
-        // The frontend /auth/callback page will read this and set up the store
-        res.redirect(
-          `${config.frontendUrl}/auth/callback?token=${token}`
-        );
+
+    // Decode the state param Google echoed back
+    let source = 'web';
+    let redirectUri = '';
+    try {
+      const raw = req.query.state as string;
+      if (raw) {
+        const parsed = JSON.parse(Buffer.from(raw, 'base64').toString('utf8'));
+        source = parsed.source || 'web';
+        redirectUri = parsed.redirectUri || '';
+      }
+    } catch {
+      // If state is missing or malformed, fall back to web redirect
+    }
+
+    if (source === 'mobile') {
+      const mobileRedirect = redirectUri || 'churchconnect://auth/callback';
+      return res.redirect(`${mobileRedirect}?token=${token}`);
+    }
+
+    // Web redirect
+    return res.redirect(`${config.frontendUrl}/auth/callback?token=${token}`);
   }
 );
 
