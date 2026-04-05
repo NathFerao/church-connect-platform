@@ -3,10 +3,12 @@ import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Icon } from 'react-native-paper';
 import { useAuthStore } from '../stores/auth.store';
 import { useThemeStore } from '../stores/theme.store';
 import { getColors, colors } from '../theme/colors';
+import { useAppTheme } from '../hooks/useAppTheme';
 
 // ── Auth screens
 import LoginScreen from '../screens/LoginScreen';
@@ -28,6 +30,7 @@ import EventsScreen from '../screens/EventsScreen';
 import MoreScreen from '../screens/MoreScreen';
 import MembersScreen from '../screens/MembersScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import ChurchSettingsScreen from '../screens/ChurchSettingsScreen';
 
 // ─── Param list types ─────────────────────────────────────────────────────────
 
@@ -42,6 +45,7 @@ export type MoreStackParamList = {
   MoreMenu: undefined;
   Members: undefined;
   Settings: undefined;
+  ChurchSettings: undefined;
 };
 
 // ─── Navigators ───────────────────────────────────────────────────────────────
@@ -72,14 +76,13 @@ function UnassignedNavigator() {
 }
 
 function MoreNavigator() {
-  const { isDark } = useThemeStore();
-  const c = getColors(isDark);
+  const { c, primary } = useAppTheme();
 
   return (
     <MoreStack.Navigator
       screenOptions={{
         headerStyle: { backgroundColor: c.surface },
-        headerTintColor: colors.primary,
+        headerTintColor: primary,
         headerTitleStyle: { color: c.text },
         headerShadowVisible: false,
       }}
@@ -99,18 +102,22 @@ function MoreNavigator() {
         component={SettingsScreen}
         options={{ title: 'Settings & Profile' }}
       />
+      <MoreStack.Screen
+        name="ChurchSettings"
+        component={ChurchSettingsScreen}
+        options={{ title: 'Church Settings' }}
+      />
     </MoreStack.Navigator>
   );
 }
 
 function MainTabs() {
-  const { isDark } = useThemeStore();
-  const c = getColors(isDark);
+  const { isDark, c, primary } = useAppTheme();
 
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarActiveTintColor: colors.primary,
+        tabBarActiveTintColor: primary,
         tabBarInactiveTintColor: c.textSecondary,
         tabBarStyle: {
           backgroundColor: c.surface,
@@ -166,6 +173,8 @@ export default function AppNavigator() {
   const { token, user, isLoading, loadToken } = useAuthStore();
   const { isDark } = useThemeStore();
   const c = getColors(isDark);
+  const church = useAuthStore((s) => s.church);
+  const primary = church?.primaryColor ?? colors.primary;
 
   useEffect(() => {
     loadToken();
@@ -173,56 +182,40 @@ export default function AppNavigator() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background }}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      <SafeAreaProvider>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background }}>
+          <ActivityIndicator size="large" color={primary} />
+        </View>
+      </SafeAreaProvider>
     );
   }
 
   const isAuthenticated = !!token;
   const isAssigned = !!user?.churchId;
 
-  // Extend React Navigation's built-in themes so NavigationContainer
-  // itself (screen backgrounds, the card/header fallback colour) also
-  // reacts to dark mode — this is what controls the header background
-  // when no explicit headerStyle is set.
   const navTheme = isDark
     ? {
         ...DarkTheme,
-        colors: {
-          ...DarkTheme.colors,
-          background: c.background,
-          card: c.surface,      // default header + tab bar background
-          text: c.text,
-          border: '#1F2937',
-          primary: colors.primary,
-          notification: colors.primary,
-        },
+        colors: { ...DarkTheme.colors, background: c.background, card: c.surface, text: c.text, border: '#1F2937', primary, notification: primary },
       }
     : {
         ...DefaultTheme,
-        colors: {
-          ...DefaultTheme.colors,
-          background: c.background,
-          card: c.surface,
-          text: c.text,
-          border: '#E5E7EB',
-          primary: colors.primary,
-          notification: colors.primary,
-        },
+        colors: { ...DefaultTheme.colors, background: c.background, card: c.surface, text: c.text, border: '#E5E7EB', primary, notification: primary },
       };
 
   return (
-    <NavigationContainer theme={navTheme}>
-      <RootStack.Navigator screenOptions={{ headerShown: false }}>
-        {!isAuthenticated ? (
-          <RootStack.Screen name="Auth" component={AuthNavigator} />
-        ) : !isAssigned ? (
-          <RootStack.Screen name="UnassignedRoot" component={UnassignedNavigator} />
-        ) : (
-          <RootStack.Screen name="MainRoot" component={MainTabs} />
-        )}
-      </RootStack.Navigator>
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer theme={navTheme}>
+        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+          {!isAuthenticated ? (
+            <RootStack.Screen name="Auth" component={AuthNavigator} />
+          ) : !isAssigned ? (
+            <RootStack.Screen name="UnassignedRoot" component={UnassignedNavigator} />
+          ) : (
+            <RootStack.Screen name="MainRoot" component={MainTabs} />
+          )}
+        </RootStack.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }

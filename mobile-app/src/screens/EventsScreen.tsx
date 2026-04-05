@@ -1,60 +1,31 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View,
-  StyleSheet,
-  FlatList,
-  RefreshControl,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  Switch,
+  View, StyleSheet, FlatList, RefreshControl,
+  ScrollView, TouchableOpacity, Alert, Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  Card,
-  Text,
-  Chip,
-  FAB,
-  Portal,
-  Modal,
-  TextInput,
-  Button,
-  Divider,
-  ActivityIndicator,
+  Card, Text, Chip, FAB, Portal, Modal, TextInput,
+  Button, Divider, ActivityIndicator,
 } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
-  format,
-  startOfMonth,
-  endOfMonth,
-  eachDayOfInterval,
-  getDay,
-  isSameDay,
+  format, startOfMonth, endOfMonth,
+  eachDayOfInterval, getDay, isSameDay,
 } from 'date-fns';
 import api from '../services/api';
-import { getColors, colors } from '../theme/colors';
-import { useThemeStore } from '../stores/theme.store';
+import { useAppTheme } from '../hooks/useAppTheme';
 import { useAuthStore } from '../stores/auth.store';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface EventRegistration {
-  id: string;
-  userId: string;
-}
+interface EventRegistration { id: string; userId: string; }
 
 interface Event {
-  id: string;
-  title: string;
-  description: string;
-  type: string;
-  location: string | null;
-  startTime: string;
-  endTime: string;
-  isAllDay: boolean;
-  isPublic: boolean;
-  maxCapacity: number | null;
-  recurrenceGroupId: string | null;
-  registrations?: EventRegistration[];
+  id: string; title: string; description: string; type: string;
+  location: string | null; startTime: string; endTime: string;
+  isAllDay: boolean; isPublic: boolean; maxCapacity: number | null;
+  recurrenceGroupId: string | null; registrations?: EventRegistration[];
 }
 
 type EventType =
@@ -109,8 +80,7 @@ function groupByMonth(events: Event[]) {
 
 export default function EventsScreen() {
   const { user } = useAuthStore();
-  const { isDark } = useThemeStore();
-  const c = getColors(isDark);
+  const { isDark, c, primary } = useAppTheme();
 
   const userRole: string = user?.role ?? '';
   const canCreate = CREATOR_ROLES.includes(userRole);
@@ -166,22 +136,48 @@ export default function EventsScreen() {
     setRefreshing(false);
   };
 
-  // ── Registration ──────────────────────────────────────────────────────────
+  // ── Registration (optimistic) ─────────────────────────────────────────────
 
   const isRegistered = (event: Event) => getRegs(event).some((r) => r.userId === userId);
   const isFull = (event: Event) =>
     event.maxCapacity !== null && getRegs(event).length >= event.maxCapacity;
 
   const handleRegister = async (event: Event) => {
+    const wasRegistered = isRegistered(event);
+
+    // Optimistically update UI immediately
+    setEvents((prev) =>
+      prev.map((e) => {
+        if (e.id !== event.id) return e;
+        const regs = getRegs(e);
+        const updatedRegs = wasRegistered
+          ? regs.filter((r) => r.userId !== userId)
+          : [...regs, { id: `temp-${Date.now()}`, userId }];
+        return { ...e, registrations: updatedRegs };
+      })
+    );
+
     setRegisteringId(event.id);
     try {
-      if (isRegistered(event)) {
+      if (wasRegistered) {
         await api.delete(`/events/${event.id}/register`);
       } else {
         await api.post(`/events/${event.id}/register`);
       }
-      await fetchEvents();
+      // Refresh in background to sync real server state
+      fetchEvents();
     } catch (error: any) {
+      // Revert optimistic update on failure
+      setEvents((prev) =>
+        prev.map((e) => {
+          if (e.id !== event.id) return e;
+          const regs = getRegs(e);
+          const reverted = wasRegistered
+            ? [...regs, { id: `temp-${Date.now()}`, userId }]
+            : regs.filter((r) => r.userId !== userId);
+          return { ...e, registrations: reverted };
+        })
+      );
       Alert.alert('Error', error?.response?.data?.error || 'Action failed');
     } finally {
       setRegisteringId(null);
@@ -225,8 +221,7 @@ export default function EventsScreen() {
     });
 
   const calendarDays = eachDayOfInterval({
-    start: startOfMonth(calendarMonth),
-    end: endOfMonth(calendarMonth),
+    start: startOfMonth(calendarMonth), end: endOfMonth(calendarMonth),
   });
   const calendarOffset = getDay(startOfMonth(calendarMonth));
 
@@ -248,12 +243,10 @@ export default function EventsScreen() {
 
   const handleCreate = async () => {
     if (!title.trim() || !description.trim()) {
-      Alert.alert('Error', 'Title and description are required');
-      return;
+      Alert.alert('Error', 'Title and description are required'); return;
     }
     if (endTime <= startTime) {
-      Alert.alert('Error', 'End time must be after start time');
-      return;
+      Alert.alert('Error', 'End time must be after start time'); return;
     }
     const payload: Record<string, any> = {
       title: title.trim(), description: description.trim(), type: eventType,
@@ -308,17 +301,13 @@ export default function EventsScreen() {
                   {item.title}
                 </Text>
                 {item.recurrenceGroupId && (
-                  <Chip compact style={styles.recurChip} textStyle={styles.recurChipText}>
-                    Recurring
-                  </Chip>
+                  <Chip compact style={styles.recurChip} textStyle={styles.recurChipText}>Recurring</Chip>
                 )}
               </View>
-
               <Chip compact textStyle={{ color: 'white', fontSize: 10 }}
                 style={{ backgroundColor: typeColor, alignSelf: 'flex-start', marginBottom: 4 }}>
                 {TYPE_LABELS[item.type] ?? item.type}
               </Chip>
-
               <Text variant="bodySmall" style={[styles.eventMeta, { color: c.textSecondary }]}>
                 {item.isAllDay
                   ? 'All day'
@@ -330,7 +319,8 @@ export default function EventsScreen() {
                 </Text>
               ) : null}
               {item.maxCapacity !== null && (
-                <Text variant="bodySmall" style={[styles.eventMeta, { color: full ? '#EF4444' : c.textSecondary }, full && styles.fullText]}>
+                <Text variant="bodySmall"
+                  style={[styles.eventMeta, { color: full ? '#EF4444' : c.textSecondary }, full && styles.fullText]}>
                   {regs.length}/{item.maxCapacity} spots{full ? ' · FULL' : ''}
                 </Text>
               )}
@@ -345,7 +335,7 @@ export default function EventsScreen() {
               style={styles.regButton}
               labelStyle={styles.regButtonLabel}
             >
-              {full && !registered ? 'Full' : registered ? 'Leave' : 'Join'}
+              {full && !registered ? 'Full' : registered ? 'Leave' : 'Register'}
             </Button>
           </Card.Content>
         </Card>
@@ -361,17 +351,18 @@ export default function EventsScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.centered, { backgroundColor: c.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={['top']}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={primary} />
+        </View>
+      </SafeAreaView>
     );
   }
 
-  // ─── Dynamic styles that depend on theme ──────────────────────────────────
   const borderColor = isDark ? '#374151' : '#D1D5DB';
 
   return (
-    <View style={[styles.container, { backgroundColor: c.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={['top']}>
       <FlatList
         data={flatData}
         keyExtractor={(item) => (typeof item === 'string' ? `header-${item}` : item.id)}
@@ -379,7 +370,8 @@ export default function EventsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         renderItem={({ item }) =>
           typeof item === 'string' ? (
-            <Text variant="titleMedium" style={[styles.monthHeader, { color: colors.primary, borderBottomColor: `${colors.primary}30` }]}>
+            <Text variant="titleMedium"
+              style={[styles.monthHeader, { color: primary, borderBottomColor: `${primary}30` }]}>
               {item}
             </Text>
           ) : (
@@ -395,16 +387,14 @@ export default function EventsScreen() {
       />
 
       {canCreate && (
-        <FAB icon="plus" style={styles.fab} onPress={() => { resetForm(); setCreateVisible(true); }} />
+        <FAB icon="plus" style={[styles.fab, { backgroundColor: primary }]}
+          onPress={() => { resetForm(); setCreateVisible(true); }} />
       )}
 
       {/* ─── Create Modal ─── */}
       <Portal>
-        <Modal
-          visible={createVisible}
-          onDismiss={() => setCreateVisible(false)}
-          contentContainerStyle={[styles.modal, { backgroundColor: c.surface }]}
-        >
+        <Modal visible={createVisible} onDismiss={() => setCreateVisible(false)}
+          contentContainerStyle={[styles.modal, { backgroundColor: c.surface }]}>
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <Text variant="titleLarge" style={[styles.modalTitle, { color: c.text }]}>Create Event</Text>
 
@@ -417,8 +407,7 @@ export default function EventsScreen() {
             <Text variant="labelMedium" style={[styles.fieldLabel, { color: c.textSecondary }]}>Event Type</Text>
             <TouchableOpacity
               style={[styles.typeSelectorBtn, { borderColor, backgroundColor: c.surface }]}
-              onPress={() => setShowTypePicker((v) => !v)}
-            >
+              onPress={() => setShowTypePicker((v) => !v)}>
               <View style={[styles.typeColorDot, { backgroundColor: EVENT_TYPE_COLORS[eventType] }]} />
               <Text style={{ color: c.text }}>{TYPE_LABELS[eventType]}</Text>
             </TouchableOpacity>
@@ -480,11 +469,11 @@ export default function EventsScreen() {
             {/* Toggles */}
             <View style={styles.toggleRow}>
               <Text variant="bodyMedium" style={{ color: c.text }}>All Day</Text>
-              <Switch value={isAllDay} onValueChange={setIsAllDay} trackColor={{ true: colors.primary }} />
+              <Switch value={isAllDay} onValueChange={setIsAllDay} trackColor={{ true: primary }} />
             </View>
             <View style={styles.toggleRow}>
               <Text variant="bodyMedium" style={{ color: c.text }}>Public Event</Text>
-              <Switch value={isPublic} onValueChange={setIsPublic} trackColor={{ true: colors.primary }} />
+              <Switch value={isPublic} onValueChange={setIsPublic} trackColor={{ true: primary }} />
             </View>
 
             <TextInput label="Max Capacity (optional)" value={maxCapacity}
@@ -495,13 +484,10 @@ export default function EventsScreen() {
             <View style={styles.recurrenceRow}>
               {(['none', 'weekly', 'custom'] as RecurrenceType[]).map((type) => (
                 <TouchableOpacity key={type}
-                  style={[styles.recurrenceBtn, { borderColor }, recurrenceType === type && styles.recurrenceBtnActive]}
+                  style={[styles.recurrenceBtn, { borderColor }, recurrenceType === type && [styles.recurrenceBtnActive, { borderColor: primary, backgroundColor: `${primary}10` }]]}
                   onPress={() => setRecurrenceType(type)}>
-                  <Text style={[
-                    styles.recurrenceBtnText,
-                    { color: c.textSecondary },
-                    recurrenceType === type && styles.recurrenceBtnTextActive,
-                  ]}>
+                  <Text style={[styles.recurrenceBtnText, { color: c.textSecondary },
+                    recurrenceType === type && { color: primary, fontWeight: '600' }]}>
                     {type === 'none' ? 'No repeat' : type === 'weekly' ? 'Weekly' : 'Custom'}
                   </Text>
                 </TouchableOpacity>
@@ -514,9 +500,10 @@ export default function EventsScreen() {
                 <View style={styles.daysRow}>
                   {DAYS.map((day, i) => (
                     <TouchableOpacity key={i}
-                      style={[styles.dayBtn, { borderColor }, weekDays.includes(i) && styles.dayBtnActive]}
+                      style={[styles.dayBtn, { borderColor }, weekDays.includes(i) && { backgroundColor: primary, borderColor: primary }]}
                       onPress={() => toggleWeekDay(i)}>
-                      <Text style={[styles.dayBtnText, { color: c.textSecondary }, weekDays.includes(i) && styles.dayBtnTextActive]}>
+                      <Text style={[styles.dayBtnText, { color: c.textSecondary },
+                        weekDays.includes(i) && { color: 'white', fontWeight: '600' }]}>
                         {day}
                       </Text>
                     </TouchableOpacity>
@@ -545,9 +532,10 @@ export default function EventsScreen() {
                     const selected = customDates.some((d) => isSameDay(d, day));
                     return (
                       <TouchableOpacity key={day.toISOString()}
-                        style={[styles.calCell, selected && styles.calCellSelected]}
+                        style={[styles.calCell, selected && { backgroundColor: primary, borderRadius: 100 }]}
                         onPress={() => toggleCustomDate(day)}>
-                        <Text style={[styles.calCellText, { color: c.text }, selected && styles.calCellTextSelected]}>
+                        <Text style={[styles.calCellText, { color: c.text },
+                          selected && { color: 'white', fontWeight: '600' }]}>
                           {format(day, 'd')}
                         </Text>
                       </TouchableOpacity>
@@ -575,7 +563,7 @@ export default function EventsScreen() {
           </ScrollView>
         </Modal>
       </Portal>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -586,10 +574,7 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   list: { padding: 16, paddingBottom: 80 },
   heading: { fontWeight: 'bold', marginBottom: 12 },
-  monthHeader: {
-    fontWeight: '700', marginTop: 20, marginBottom: 8,
-    paddingBottom: 4, borderBottomWidth: 1,
-  },
+  monthHeader: { fontWeight: '700', marginTop: 20, marginBottom: 8, paddingBottom: 4, borderBottomWidth: 1 },
   empty: { textAlign: 'center', marginTop: 48 },
   eventCard: { marginBottom: 10, overflow: 'hidden' },
   typeBar: { height: 4, width: '100%' },
@@ -604,55 +589,36 @@ const styles = StyleSheet.create({
   recurChipText: { fontSize: 9, color: '#4F46E5' },
   eventMeta: { fontSize: 12, marginTop: 2 },
   fullText: { fontWeight: '600' },
-  regButton: { alignSelf: 'center', minWidth: 70 },
+  regButton: { alignSelf: 'center', minWidth: 80 },
   regButtonLabel: { fontSize: 11 },
-  fab: { position: 'absolute', bottom: 24, right: 24, backgroundColor: colors.primary },
+  fab: { position: 'absolute', bottom: 24, right: 24 },
   modal: { margin: 16, borderRadius: 16, padding: 24, maxHeight: '92%' },
   modalTitle: { fontWeight: 'bold', marginBottom: 20 },
   input: { marginBottom: 12 },
   fieldLabel: { marginBottom: 6, marginTop: 4 },
-  typeSelectorBtn: {
-    flexDirection: 'row', alignItems: 'center', borderWidth: 1,
-    borderRadius: 8, padding: 12, marginBottom: 8, gap: 10,
-  },
+  typeSelectorBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 8, padding: 12, marginBottom: 8, gap: 10 },
   typeColorDot: { width: 12, height: 12, borderRadius: 6 },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
-  typeOption: {
-    flexDirection: 'row', alignItems: 'center', borderWidth: 1,
-    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, gap: 6,
-  },
-  typeOptionSelected: { borderColor: colors.primary, backgroundColor: `${colors.primary}10` },
+  typeOption: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, gap: 6 },
+  typeOptionSelected: { borderColor: '#4F46E5', backgroundColor: '#4F46E510' },
   typeOptionText: { fontSize: 12 },
   dateRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   dateBtn: { flex: 1 },
-  toggleRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingVertical: 8, marginBottom: 8,
-  },
+  toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, marginBottom: 8 },
   recurrenceRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  recurrenceBtn: {
-    flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 8, alignItems: 'center',
-  },
-  recurrenceBtnActive: { borderColor: colors.primary, backgroundColor: `${colors.primary}10` },
+  recurrenceBtn: { flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 8, alignItems: 'center' },
+  recurrenceBtnActive: {},
   recurrenceBtnText: { fontSize: 12 },
-  recurrenceBtnTextActive: { color: colors.primary, fontWeight: '600' },
   weeklySection: { marginBottom: 8 },
   daysRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  dayBtn: {
-    width: 36, height: 36, borderRadius: 18, borderWidth: 1,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  dayBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  dayBtn: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   dayBtnText: { fontSize: 11 },
-  dayBtnTextActive: { color: 'white', fontWeight: '600' },
   calendarSection: { marginBottom: 8 },
   calNavRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   calDayLabel: { width: `${100 / 7}%`, textAlign: 'center', fontSize: 11, paddingVertical: 4 },
   calCell: { width: `${100 / 7}%`, aspectRatio: 1, justifyContent: 'center', alignItems: 'center' },
-  calCellSelected: { backgroundColor: colors.primary, borderRadius: 100 },
   calCellText: { fontSize: 13 },
-  calCellTextSelected: { color: 'white', fontWeight: '600' },
   modalActions: { flexDirection: 'row', gap: 12 },
   modalBtn: { flex: 1 },
 });
